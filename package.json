@@ -1,0 +1,25 @@
+{
+  "name": "vchemics-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tally-integrated CEO dashboard for VChemics India Solutions",
+  "workspaces": [
+    "packages/shared",
+    "packages/sync-agent",
+    "packages/backend",
+    "packages/frontend"
+  ],
+  "scripts": {
+    "build:all": "npm run build --workspaces --if-present",
+    "dev:backend": "npm run dev --workspace @vchemics/backend",
+    "dev:frontend": "npm run dev --workspace @vchemics/frontend",
+    "dev:sync-agent": "npm run dev --workspace @vchemics/sync-agent",
+    "dev:all": "concurrently -n backend,frontend -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

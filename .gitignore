@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Build output
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Prisma
+packages/backend/prisma/migrations/dev.db*
+
+# Sync agent raw XML samples (captured at runtime; keep the folder, ignore contents)
+packages/sync-agent/samples/*.xml
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pino-*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Windows service artifacts
+packages/sync-agent/daemon/

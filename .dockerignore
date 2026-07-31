@@ -1,0 +1,14 @@
+# Keep build context small & reproducible — installs happen inside the image.
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+.git
+.github
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+packages/sync-agent/samples/*.xml
+# stray nested clone (see repo notes)
+vechemics_dashboard

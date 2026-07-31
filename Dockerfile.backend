@@ -1,0 +1,29 @@
+# VChemics backend (Express + Prisma + PostgreSQL).
+# Build context = repo root, so the whole npm workspace is available.
+# On Railway: set this service's RAILWAY_DOCKERFILE_PATH=Dockerfile.backend
+FROM node:22-slim
+
+WORKDIR /app
+
+# Prisma needs OpenSSL both to generate the client and at runtime.
+RUN apt-get update -y \
+ && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# Install all workspace deps from the root lockfile (layer cached until a
+# package.json changes).
+COPY package.json package-lock.json ./
+COPY packages/shared/package.json packages/shared/package.json
+COPY packages/backend/package.json packages/backend/package.json
+COPY packages/frontend/package.json packages/frontend/package.json
+COPY packages/sync-agent/package.json packages/sync-agent/package.json
+RUN npm ci
+
+# Copy sources and build shared + backend (backend build runs `prisma generate`).
+COPY . .
+RUN npm run build -w @vchemics/shared \
+ && npm run build -w @vchemics/backend
+
+ENV NODE_ENV=production
+# Railway injects PORT and DATABASE_URL. Apply migrations, then start.
+CMD ["sh", "-c", "npm run -w @vchemics/backend prisma:deploy && node packages/backend/dist/index.js"]

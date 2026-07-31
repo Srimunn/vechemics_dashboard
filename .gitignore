@@ -37,3 +37,4 @@ Thumbs.db
 
 # Windows service artifacts
 packages/sync-agent/daemon/
+vechemics_dashboard/

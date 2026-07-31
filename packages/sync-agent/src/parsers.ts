@@ -1,11 +1,11 @@
 /**
  * Shared helpers for turning fast-xml-parser output into clean values.
  *
- * NOTE: Tally's exact XML shape varies by version and report. These helpers are
- * defensive (tolerate missing nodes, single-vs-array, Dr/Cr suffixes) and the
- * per-report parsers built on them are BEST-EFFORT until validated against real
- * samples captured on the Vchemics PC (see ./samples). Adjust the field-path
- * lookups there once you have real XML.
+ * The per-report parsers built on these were rewritten to match the ACTUAL
+ * TallyPrime 7.0 XML captured on the Vchemics PC (validated against fixtures in
+ * ./samples/fixtures via `npm run test:parsers`). Tally's real exports are flat:
+ * repeated sibling tags (STOCKITEMNAME, LEDGERNAME, BSNAME/BSAMT, DSPACCNAME…)
+ * collapse into positionally-aligned arrays, so parsers zip arrays by index.
  */
 
 /** fast-xml-parser yields a single object for one child, an array for many. */
@@ -90,4 +90,57 @@ export function attrOrText(node: Record<string, unknown>, attr: string, child: s
   const a = node[attr];
   if (typeof a === 'string' && a) return a;
   return text(node[child]);
+}
+
+/**
+ * Recursively gather every value stored under `key`, anywhere in the parsed
+ * tree, flattening arrays. This makes parsers robust to the exact wrapper depth
+ * (ENVELOPE vs ENVELOPE>BODY>DATA vs …) — we just ask for the tag we want.
+ * Does not descend into a matched node looking for the same key again (our
+ * Tally tags are never self-nested), which keeps sibling ordering intact.
+ */
+export function deepCollect(root: unknown, key: string): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+      return;
+    }
+    if (node && typeof node === 'object') {
+      const obj = node as Record<string, unknown>;
+      for (const [k, v] of Object.entries(obj)) {
+        if (k === key) {
+          for (const item of toArray(v)) out.push(item as Record<string, unknown>);
+        } else {
+          visit(v);
+        }
+      }
+    }
+  };
+  visit(root);
+  return out;
+}
+
+/**
+ * Parse a Tally quantity string like " 2.00 NOS" / "39.00 NOS" / "-5 kg" into
+ * a number + unit. Leading/trailing whitespace tolerated.
+ */
+export function parseQtyUnit(raw: unknown): { quantity: number; unit: string } {
+  const s = text(raw).trim();
+  const m = /^(-?[\d,]*\.?\d+)\s*(.*)$/.exec(s);
+  if (!m) return { quantity: 0, unit: '' };
+  return {
+    quantity: Number.parseFloat(m[1]!.replace(/,/g, '')) || 0,
+    unit: (m[2] ?? '').trim(),
+  };
+}
+
+/** Parse a Tally rate string like "1779.66/NOS" into a number + unit. */
+export function parseRateUnit(raw: unknown): { rate: number; unit: string } {
+  const s = text(raw).trim();
+  const [ratePart, unitPart] = s.split('/');
+  return {
+    rate: Number.parseFloat((ratePart ?? '').replace(/,/g, '')) || 0,
+    unit: (unitPart ?? '').trim(),
+  };
 }

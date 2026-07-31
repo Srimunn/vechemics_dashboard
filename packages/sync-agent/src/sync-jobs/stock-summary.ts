@@ -3,61 +3,44 @@ import { callTally } from '../tally-client.js';
 import { stockSummary } from '../xml-templates.js';
 import { push } from '../uploader.js';
 import { logger } from '../logger.js';
-import { toArray, text, amount, absAmount, attrOrText } from '../parsers.js';
+import { text, amount, absAmount, deepCollect, parseQtyUnit } from '../parsers.js';
 import type { SyncContext } from './context.js';
 
 /**
- * Parse Stock Summary. Common shape:
- *   ENVELOPE > BODY > DATA > (COLLECTION|TALLYMESSAGE) > STOCKITEM[] / STOCKSUMMARY[]
- *     name, base units, closing qty, closing value, closing rate (avg cost)
- * BEST-EFFORT until validated against real ./samples XML.
+ * Parse Stock Summary. REAL Tally 7.0 shape (validated against fixtures):
+ *   positionally-aligned pairs of
+ *     DSPACCNAME > DSPDISPNAME            (item name)
+ *     DSPSTKINFO > DSPSTKCL > { DSPCLQTY ("39.00 NOS"), DSPCLRATE, DSPCLAMTA }
+ *
+ * Many items carry empty qty/amount (zero stock) — those are skipped.
+ * DSPCLAMTA is negative by Tally convention for closing balance value; we store
+ * its magnitude as closingValue.
  */
 export function parseStockItems(parsed: unknown): StockItem[] {
-  const root = parsed as Record<string, unknown> | undefined;
-  const body = (root?.['ENVELOPE'] as Record<string, unknown> | undefined)?.['BODY'];
-  const data = (body as Record<string, unknown> | undefined)?.['DATA'] ?? body;
-  const container = (data as Record<string, unknown> | undefined) ?? {};
+  const names = deepCollect(parsed, 'DSPACCNAME');
+  const infos = deepCollect(parsed, 'DSPSTKINFO');
+  const out: StockItem[] = [];
 
-  const nodes = [
-    ...toArray(container['STOCKITEM'] as Record<string, unknown>[]),
-    ...toArray(container['STOCKSUMMARY'] as Record<string, unknown>[]),
-    // When wrapped in a collection:
-    ...toArray(
-      (container['COLLECTION'] as Record<string, unknown> | undefined)?.['STOCKITEM'] as
-        | Record<string, unknown>[]
-        | undefined,
-    ),
-  ];
+  const count = Math.min(names.length, infos.length);
+  for (let i = 0; i < count; i++) {
+    const name = text(names[i]!['DSPDISPNAME']);
+    const closing = infos[i]!['DSPSTKCL'] as Record<string, unknown> | undefined;
+    if (!name || !closing) continue;
 
-  return nodes.map((n) => {
-    const { quantity } = parseQty(text(n['CLOSINGBALANCE'] ?? n['CLOSINGQTY']));
-    const item: StockItem = {
-      name: attrOrText(n, '@_NAME', 'NAME') || text(n['STOCKITEMNAME']),
-      unit: text(n['BASEUNITS'] ?? n['BASEUNIT']) || parseUnit(text(n['CLOSINGBALANCE'])),
+    const amtRaw = text(closing['DSPCLAMTA']);
+    if (!amtRaw.trim()) continue; // zero-stock item — no closing value
+
+    const { quantity, unit } = parseQtyUnit(closing['DSPCLQTY']);
+    out.push({
+      name,
+      unit,
       closingQty: quantity,
-      closingValue: absAmount(n['CLOSINGVALUE']),
-      avgCost: Math.abs(amount(rateOnly(text(n['CLOSINGRATE'])))),
-    };
-    const hsn = text(n['HSNCODE'] ?? n['GSTHSNNAME']);
-    const gst = Number.parseFloat(text(n['GSTRATE']));
-    if (hsn) item.hsnCode = hsn;
-    if (Number.isFinite(gst)) item.gstRate = gst;
-    return item;
-  }).filter((i) => i.name);
-}
+      closingValue: absAmount(closing['DSPCLAMTA']),
+      avgCost: Math.abs(amount(closing['DSPCLRATE'])),
+    });
+  }
 
-function parseQty(raw: string): { quantity: number } {
-  const m = /^(-?[\d,]*\.?\d+)/.exec(raw.trim());
-  return { quantity: m ? Number.parseFloat(m[1]!.replace(/,/g, '')) || 0 : 0 };
-}
-
-function parseUnit(raw: string): string {
-  const m = /[\d,.\s-]*(.*)$/.exec(raw.trim());
-  return (m?.[1] ?? '').trim();
-}
-
-function rateOnly(raw: string): string {
-  return raw.split('/')[0] ?? raw;
+  return out;
 }
 
 export async function syncStockSummary(ctx: SyncContext): Promise<number> {

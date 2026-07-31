@@ -8,6 +8,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "sync:once": "tsx src/index.ts --once",
+    "test:parsers": "tsx src/verify-parsers.ts",
     "service:install": "node scripts/install-service.js",
     "service:uninstall": "node scripts/uninstall-service.js"
   },

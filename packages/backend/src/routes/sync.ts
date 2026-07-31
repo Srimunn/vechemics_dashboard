@@ -87,6 +87,7 @@ const ingestSchema = z.object({
   jobType: z.enum([
     'ledger-list',
     'balance-sheet',
+    'profit-and-loss',
     ...VOUCHER_JOB_TYPES,
     'stock-summary',
     'bills-receivable',
@@ -246,7 +247,7 @@ syncRouter.post('/ingest', syncAuth, async (req: Request, res: Response) => {
   try {
     let ingested = 0;
 
-    if (jobType === 'ledger-list' || jobType === 'balance-sheet') {
+    if (jobType === 'ledger-list' || jobType === 'balance-sheet' || jobType === 'profit-and-loss') {
       ingested = await ingestLedgers(companyId, data);
     } else if ((VOUCHER_JOB_TYPES as readonly string[]).includes(jobType)) {
       ingested = await ingestVouchers(companyId, data);

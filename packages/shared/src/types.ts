@@ -39,7 +39,8 @@ export type SyncJobType =
   | 'stock-summary'
   | 'bills-receivable'
   | 'bills-payable'
-  | 'balance-sheet';
+  | 'balance-sheet'
+  | 'profit-and-loss';
 
 // ---------------------------------------------------------------------------
 // Normalized domain shapes (produced by the sync agent, stored by the backend).
@@ -163,6 +164,7 @@ export type KpiKey =
 export type SyncJobPayload =
   | { syncId: string; jobType: 'ledger-list'; data: Ledger[] }
   | { syncId: string; jobType: 'balance-sheet'; data: Ledger[] }
+  | { syncId: string; jobType: 'profit-and-loss'; data: Ledger[] }
   | {
       syncId: string;
       jobType:

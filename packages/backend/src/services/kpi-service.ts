@@ -108,17 +108,32 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
     .filter((l) => /bank/i.test(l.parentGroup))
     .reduce((s, l) => s + num(l.currentBalance), 0);
 
-  // --- GST payable: output GST - input GST (Duties & Taxes) ---
+  // --- GST payable: output GST - input GST ---
+  // Primary source is Duties & Taxes ledger balances (from ledger-list). The
+  // /gst/i test matches the real Tally names "OUTPUT CGST @ 9%" / "OUTPUT SGST
+  // @9%" / IGST via the GST substring inside C/S/IGST.
   const gstLedgers = ledgers.filter(
     (l) => /duties.*tax/i.test(l.parentGroup) || /gst/i.test(l.name),
   );
-  const outputGst = gstLedgers
-    .filter((l) => /output/i.test(l.name))
-    .reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0);
-  const inputGst = gstLedgers
-    .filter((l) => /input/i.test(l.name))
-    .reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0);
-  const gstPayable = outputGst - inputGst;
+  let gstPayable =
+    gstLedgers.filter((l) => /output/i.test(l.name)).reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0) -
+    gstLedgers.filter((l) => /input/i.test(l.name)).reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0);
+
+  // Fallback: when no GST ledger balances are present, derive from this month's
+  // voucher GST entries (OUTPUT vs INPUT), which the confirmed Tally voucher
+  // format exposes as ledger entries like "OUTPUT CGST @ 9%".
+  if (gstLedgers.length === 0) {
+    const gstEntries = await prisma.voucherLedgerEntry.findMany({
+      where: {
+        ledgerName: { contains: 'GST', mode: 'insensitive' },
+        voucher: { companyId, isCancelled: false, date: { gte: monthStart, lt: dayEnd } },
+      },
+      select: { ledgerName: true, amount: true },
+    });
+    const output = gstEntries.filter((e) => /output/i.test(e.ledgerName)).reduce((s, e) => s + num(e.amount), 0);
+    const input = gstEntries.filter((e) => /input/i.test(e.ledgerName)).reduce((s, e) => s + num(e.amount), 0);
+    gstPayable = output - input;
+  }
 
   // --- Outstandings & inventory ---
   const outstandingReceivables = outstandings

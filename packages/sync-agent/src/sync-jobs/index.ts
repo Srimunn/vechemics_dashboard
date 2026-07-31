@@ -9,6 +9,7 @@ import { syncVoucherRegister } from './voucher-register.js';
 import { syncStockSummary } from './stock-summary.js';
 import { syncBillsReceivable, syncBillsPayable } from './outstandings.js';
 import { syncBalanceSheet } from './balance-sheet.js';
+import { syncProfitAndLoss } from './profit-and-loss.js';
 
 /** YYYYMMDD for a given date. */
 function ymd(d: Date): string {
@@ -22,6 +23,7 @@ type Job = { name: string; run: (ctx: SyncContext) => Promise<number> };
 const JOBS: Job[] = [
   { name: 'ledger-list', run: syncLedgerList },
   { name: 'balance-sheet', run: syncBalanceSheet },
+  { name: 'profit-and-loss', run: syncProfitAndLoss },
   { name: 'stock-summary', run: syncStockSummary },
   { name: 'day-book', run: syncDayBook },
   { name: 'voucher-register-sales', run: (c) => syncVoucherRegister(c, 'Sales') },

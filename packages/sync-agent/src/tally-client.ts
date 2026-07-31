@@ -70,6 +70,11 @@ export async function saveSample(reportName: string, raw: string): Promise<void>
   }
 }
 
+/** Sanitize + parse a raw Tally XML string into an object tree. */
+export function parseTallyXml(raw: string): unknown {
+  return parser.parse(sanitizeTallyXml(raw));
+}
+
 /**
  * POST XML to Tally, optionally save the raw sample, and return the parsed
  * object tree. Callers navigate the tree in their own parser module.
@@ -77,6 +82,5 @@ export async function saveSample(reportName: string, raw: string): Promise<void>
 export async function callTally(xml: string, reportName: string): Promise<unknown> {
   const raw = await rawTallyRequest(xml);
   await saveSample(reportName, raw);
-  const parsed = parser.parse(sanitizeTallyXml(raw));
-  return parsed;
+  return parseTallyXml(raw);
 }

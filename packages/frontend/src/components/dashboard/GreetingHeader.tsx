@@ -6,7 +6,7 @@ import { LastSyncIndicator } from './LastSyncIndicator';
 import { RefreshButton } from './RefreshButton';
 
 export function GreetingHeader({
-  name = 'Ravi',
+  name = 'Velmurugan',
   fyLabel = 'FY 2026-27',
   lastSync,
   onRefreshed,

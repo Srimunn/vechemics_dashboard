@@ -25,9 +25,9 @@ function FilterPill({ value }: { value: string }) {
   );
 }
 
-export function TopBar({ userName = 'Ravi Venkatesan', userRole = 'CEO / MD' }: { userName?: string; userRole?: string }) {
+export function TopBar({ userName = 'Velmurugan', userRole = 'CEO / MD' }: { userName?: string; userRole?: string }) {
   const [drawerOpen, setDrawerOpen] = React.useState(false);
-  const displayUserName = userName || 'Ravi Venkatesan';
+  const displayUserName = userName || 'Velmurugan';
   const displayRole = userRole || 'CEO / MD';
 
   const initials = displayUserName
@@ -83,7 +83,7 @@ export function TopBar({ userName = 'Ravi Venkatesan', userRole = 'CEO / MD' }: 
           {/* User Profile */}
           <div className="flex items-center gap-2.5 pl-2">
             <div className="flex h-[40px] w-[40px] items-center justify-center rounded-full bg-[#1E3A5F] text-xs font-bold text-white">
-              {initials || 'RV'}
+              {initials || 'V'}
             </div>
             <div className="hidden text-left leading-tight sm:block">
               <p className="text-[13px] font-semibold text-[#334155]">{displayUserName}</p>

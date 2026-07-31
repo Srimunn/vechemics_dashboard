@@ -4,7 +4,7 @@ import { TopBar } from '@/components/layout/TopBar';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
-  const userName = session?.user?.name ?? 'Ravi Venkatesan';
+  const userName = session?.user?.name ?? 'Velmurugan';
   const userRole = session?.user?.role ?? 'CEO / MD';
 
   return (

@@ -5,6 +5,8 @@ import { env } from './lib/env.js';
 import { logger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
 import { syncRouter } from './routes/sync.js';
+import { dashboardRouter } from './routes/dashboard.js';
+import { authRouter } from './routes/auth.js';
 
 const app = express();
 
@@ -23,6 +25,8 @@ app.get('/health', async (_req, res) => {
 });
 
 app.use('/api/sync', syncRouter);
+app.use('/api/dashboard', dashboardRouter);
+app.use('/api/auth', authRouter);
 
 const server = app.listen(env.PORT, () => {
   logger.info(`Backend API listening on http://localhost:${env.PORT}`);

@@ -4,15 +4,15 @@ import { TopBar } from '@/components/layout/TopBar';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
-  const userName = session?.user?.name ?? 'Velmurugan';
+  const userName = session?.user?.name ?? 'Ravi Venkatesan';
   const userRole = session?.user?.role ?? 'CEO / MD';
 
   return (
-    <div className="flex h-screen overflow-hidden bg-muted/40">
+    <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar userName={userName} userRole={userRole} />
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <main className="flex-1 overflow-y-auto bg-[#F8FAFC]">{children}</main>
       </div>
     </div>
   );

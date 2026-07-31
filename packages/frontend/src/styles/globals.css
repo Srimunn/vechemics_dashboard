@@ -3,34 +3,32 @@
 @tailwind utilities;
 
 :root {
-  --background: 0 0% 100%;
-  --foreground: 222 47% 11%;
-  --card: 0 0% 100%;
+  --background: 210 40% 98%; /* #F8FAFC */
+  --foreground: 222 47% 11%; /* #0F172A */
+  --card: 0 0% 100%; /* #FFFFFF */
   --card-foreground: 222 47% 11%;
-  --border: 220 13% 91%;
-  --muted: 210 40% 96%;
-  --muted-foreground: 215 16% 47%;
-  --primary: 221 83% 53%; /* deep blue #2563EB */
+  --border: 214 32% 91%; /* #E2E8F0 */
+  --muted: 210 40% 96.1%; /* #F1F5F9 */
+  --muted-foreground: 215.4 16.3% 46.9%; /* #64748B */
+  --primary: 221.2 83.2% 53.3%; /* #2563EB */
   --primary-foreground: 0 0% 100%;
   --success: 142 71% 45%;
   --warning: 38 92% 50%;
   --destructive: 0 84% 60%;
-  --accent: 221 100% 96%;
-  --radius: 0.75rem;
+  --accent: 214 32% 95%;
+  --radius: 0.85rem;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: 222 47% 7%;
-    --foreground: 210 40% 96%;
-    --card: 222 47% 10%;
-    --card-foreground: 210 40% 96%;
-    --border: 217 33% 20%;
-    --muted: 217 33% 15%;
-    --muted-foreground: 215 20% 60%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 11%;
-    --accent: 217 40% 18%;
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --border: 214 32% 91%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 214 32% 95%;
   }
 }
 
@@ -39,8 +37,8 @@
 }
 
 body {
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
+  background-color: #F8FAFC;
+  color: #0F172A;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }

@@ -4,22 +4,16 @@ import Link from 'next/link';
 import { ArrowUpRight, ArrowDownRight, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDelta, type Delta } from '@/lib/format';
-import { TrendSparkline } from './TrendSparkline';
 
 export interface KpiCardProps {
   label: string;
   value: number;
-  /** Formatter for the big value; defaults to Indian ₹. */
   format?: (v: number) => string;
   comparisonLabel?: string;
   comparisonValue?: number;
   delta?: Delta;
-  /**
-   * How to color the delta. 'positive-good' (default): up=green, down=red.
-   * 'positive-bad': up=amber warning (e.g. payables/receivables rising).
-   */
   deltaSemantics?: 'positive-good' | 'positive-bad';
-  sparkline?: number[];
+  accentColor?: string; // Optional top border accent color: '#2563EB', '#F59E0B', '#10B981', '#8B5CF6'
   href?: string;
   linkLabel?: string;
 }
@@ -34,17 +28,10 @@ function deltaTone(
 }
 
 const TONE_CLASS: Record<string, string> = {
-  success: 'bg-success/10 text-success',
-  destructive: 'bg-destructive/10 text-destructive',
-  warning: 'bg-warning/10 text-warning',
-  muted: 'bg-muted text-muted-foreground',
-};
-
-const SPARK_DIR: Record<string, 'up' | 'down' | 'flat'> = {
-  success: 'up',
-  destructive: 'down',
-  warning: 'up',
-  muted: 'flat',
+  success: 'bg-[#DCFCE7] text-[#16A34A]',
+  destructive: 'bg-[#FEE2E2] text-[#DC2626]',
+  warning: 'bg-[#FEE2E2] text-[#DC2626]',
+  muted: 'bg-[#F1F5F9] text-[#64748B]',
 };
 
 export function KpiCard({
@@ -55,54 +42,63 @@ export function KpiCard({
   comparisonValue,
   delta,
   deltaSemantics = 'positive-good',
-  sparkline,
+  accentColor,
   href,
-  linkLabel = 'View Analytics',
+  linkLabel = 'View Analytics →',
 }: KpiCardProps) {
   const tone = delta ? deltaTone(delta.direction, deltaSemantics) : 'muted';
   const DeltaIcon =
     delta?.direction === 'up' ? ArrowUpRight : delta?.direction === 'down' ? ArrowDownRight : ArrowRight;
 
+  const topBorderStyle = accentColor ? { borderTop: `3px solid ${accentColor}` } : {};
+
   return (
-    <div className="group flex flex-col justify-between rounded-xl border bg-card p-6 transition-all duration-200 hover:border-primary/30 hover:shadow-sm">
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          {label}
-        </span>
-        {delta && (
-          <span className={cn('inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold', TONE_CLASS[tone])}>
-            <DeltaIcon className="h-3 w-3" />
-            {formatDelta(delta.pct)}
+    <div
+      style={topBorderStyle}
+      className="group flex flex-col justify-between rounded-[14px] bg-[#FFFFFF] p-6 transition-all duration-200 border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)] hover:border-[#CBD5E1]"
+    >
+      <div>
+        {/* Header row: Label & Delta pill */}
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <span className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[#64748B]">
+            {label}
           </span>
-        )}
-      </div>
-
-      <div className="mt-3 text-3xl font-bold tabular tracking-tight text-foreground">
-        {format(value)}
-      </div>
-
-      <div className="mt-3 flex items-end justify-between gap-3">
-        <div className="min-w-0">
-          {comparisonLabel && comparisonValue !== undefined && (
-            <p className="truncate text-xs text-muted-foreground">
-              {comparisonLabel}: <span className="tabular">{formatCurrency(comparisonValue)}</span>
-            </p>
+          {delta && (
+            <span
+              className={cn(
+                'inline-flex items-center gap-0.5 rounded-full px-[10px] py-[4px] text-[12px] font-semibold',
+                TONE_CLASS[tone],
+              )}
+            >
+              <DeltaIcon className="h-3 w-3 shrink-0" />
+              {formatDelta(delta.pct)}
+            </span>
           )}
         </div>
-        {sparkline && sparkline.length > 1 && (
-          <div className="w-24 shrink-0">
-            <TrendSparkline data={sparkline} direction={SPARK_DIR[tone]} />
-          </div>
+
+        {/* Big number */}
+        <div className="mb-2 text-[32px] font-bold tabular tracking-tight text-[#0F172A] leading-none">
+          {format(value)}
+        </div>
+
+        {/* Yesterday comparison */}
+        {comparisonLabel && comparisonValue !== undefined && (
+          <p className="text-[13px] text-[#94A3B8]">
+            {comparisonLabel}: <span className="font-medium text-[#64748B] tabular">{formatCurrency(comparisonValue)}</span>
+          </p>
         )}
       </div>
 
+      {/* Analytics link */}
       {href && (
-        <Link
-          href={href}
-          className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100"
-        >
-          {linkLabel} <ArrowRight className="h-3 w-3" />
-        </Link>
+        <div className="mt-4">
+          <Link
+            href={href}
+            className="inline-flex items-center text-[13px] font-medium text-[#2563EB] hover:underline"
+          >
+            {linkLabel}
+          </Link>
+        </div>
       )}
     </div>
   );

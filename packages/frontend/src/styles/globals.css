@@ -3,34 +3,32 @@
 @tailwind utilities;
 
 :root {
-  --background: 0 0% 100%;
-  --foreground: 222 47% 11%;
-  --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --border: 220 13% 91%;
-  --muted: 210 40% 96%;
+  --background: 222 47% 11%; /* Deep Slate Navy #0F172A */
+  --foreground: 210 40% 98%;
+  --card: 0 0% 100%; /* Crisp Pure White Cards */
+  --card-foreground: 222 47% 11%; /* Dark Slate Text on Cards */
+  --border: 214 32% 91%; /* Light Slate Border #E2E8F0 */
+  --muted: 215 28% 17%;
   --muted-foreground: 215 16% 47%;
-  --primary: 221 83% 53%; /* deep blue #2563EB */
+  --primary: 221.2 83.2% 53.3%; /* Executive Royal Blue #2563EB */
   --primary-foreground: 0 0% 100%;
-  --success: 142 71% 45%;
+  --success: 158 64% 42%; /* Emerald #059669 */
   --warning: 38 92% 50%;
-  --destructive: 0 84% 60%;
-  --accent: 221 100% 96%;
-  --radius: 0.75rem;
+  --destructive: 346 84% 61%;
+  --accent: 214 32% 95%;
+  --radius: 0.85rem;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: 222 47% 7%;
-    --foreground: 210 40% 96%;
-    --card: 222 47% 10%;
-    --card-foreground: 210 40% 96%;
-    --border: 217 33% 20%;
-    --muted: 217 33% 15%;
-    --muted-foreground: 215 20% 60%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 11%;
-    --accent: 217 40% 18%;
+    --background: 222 47% 11%; /* Keep Deep Slate Navy background in dark preference */
+    --foreground: 210 40% 98%;
+    --card: 0 0% 100%; /* Always force pure white cards */
+    --card-foreground: 222 47% 11%; /* Always dark slate text inside cards */
+    --border: 214 32% 91%;
+    --muted: 215 28% 17%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 215 28% 17%;
   }
 }
 
@@ -49,3 +47,4 @@ body {
 .tabular {
   font-variant-numeric: tabular-nums;
 }
+

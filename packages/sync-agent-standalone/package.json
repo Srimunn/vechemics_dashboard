@@ -1,0 +1,16 @@
+{
+  "name": "vchemics-sync-agent-standalone",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Self-contained TallyPrime -> VChemics backend sync agent (plain JS, no monorepo).",
+  "scripts": {
+    "test:tally": "node test-tally.js",
+    "sync": "node sync-once.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "fast-xml-parser": "^4.5.1",
+    "pino": "^9.6.0"
+  }
+}

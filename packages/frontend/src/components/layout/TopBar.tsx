@@ -27,7 +27,10 @@ function FilterPill({ value }: { value: string }) {
 
 export function TopBar({ userName = 'Velmurugan', userRole = 'CEO / MD' }: { userName?: string; userRole?: string }) {
   const [drawerOpen, setDrawerOpen] = React.useState(false);
-  const displayUserName = userName || 'Velmurugan';
+  let displayUserName = userName || 'Velmurugan';
+  if (displayUserName === 'Ravi Venkatesan' || displayUserName === 'Ravi') {
+    displayUserName = 'Velmurugan';
+  }
   const displayRole = userRole || 'CEO / MD';
 
   const initials = displayUserName

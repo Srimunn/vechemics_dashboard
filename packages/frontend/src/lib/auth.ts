@@ -51,10 +51,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     jwt: ({ token, user }) => {
       if (user) token.role = user.role;
+      if (!token.name || token.name === 'Ravi Venkatesan' || token.name === 'Ravi') {
+        token.name = 'Velmurugan';
+      }
       return token;
     },
     session: ({ session, token }) => {
-      if (session.user) session.user.role = token.role as string | undefined;
+      if (session.user) {
+        session.user.role = token.role as string | undefined;
+        if (!session.user.name || session.user.name === 'Ravi Venkatesan' || session.user.name === 'Ravi') {
+          session.user.name = (token.name as string) || 'Velmurugan';
+        }
+      }
       return session;
     },
   },

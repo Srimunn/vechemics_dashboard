@@ -14,6 +14,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { GreetingHeader } from '@/components/dashboard/GreetingHeader';
+import { RefreshButton } from '@/components/dashboard/RefreshButton';
 import { SalesPurchaseChart } from '@/components/dashboard/SalesPurchaseChart';
 import { CashFlowChart } from '@/components/dashboard/CashFlowChart';
 
@@ -22,22 +23,23 @@ interface KpiConfig {
   label: string;
   semantics: 'positive-good' | 'positive-bad';
   href?: string;
+  accentColor?: string;
 }
 
 const KPI_CONFIGS: KpiConfig[] = [
-  { key: 'todaySales', label: "Today's Sales", semantics: 'positive-good', href: '/dashboard/sales-analytics' },
-  { key: 'todayPurchase', label: "Today's Purchase", semantics: 'positive-good', href: '/dashboard/purchase-analytics' },
-  { key: 'todayGrossProfit', label: "Today's Gross Profit", semantics: 'positive-good', href: '/dashboard/product-profitability' },
-  { key: 'todayNetProfit', label: "Today's Net Profit", semantics: 'positive-good', href: '/dashboard/financial-overview' },
+  { key: 'todaySales', label: "Today's Sales", semantics: 'positive-good', href: '/dashboard/sales-analytics', accentColor: '#2563EB' },
+  { key: 'todayPurchase', label: "Today's Purchase", semantics: 'positive-good', href: '/dashboard/purchase-analytics', accentColor: '#F59E0B' },
+  { key: 'todayGrossProfit', label: "Today's Gross Profit", semantics: 'positive-good', href: '/dashboard/product-profitability', accentColor: '#10B981' },
+  { key: 'todayNetProfit', label: "Today's Net Profit", semantics: 'positive-good', href: '/dashboard/financial-overview', accentColor: '#8B5CF6' },
   { key: 'collectionsToday', label: 'Collections Today', semantics: 'positive-good', href: '/dashboard/receivables' },
-  { key: 'outstandingReceivables', label: 'Outstanding Receivables', semantics: 'positive-bad', href: '/dashboard/receivables' },
-  { key: 'outstandingPayables', label: 'Outstanding Payables', semantics: 'positive-bad', href: '/dashboard/payables' },
-  { key: 'cashInHand', label: 'Cash in Hand', semantics: 'positive-good', href: '/dashboard/financial-overview' },
-  { key: 'bankBalance', label: 'Bank Balance', semantics: 'positive-good', href: '/dashboard/financial-overview' },
-  { key: 'inventoryValue', label: 'Inventory Value', semantics: 'positive-good', href: '/dashboard/inventory' },
-  { key: 'gstPayable', label: 'GST Payable', semantics: 'positive-bad', href: '/dashboard/gst' },
-  { key: 'mtdSales', label: 'Sales Value (MTD)', semantics: 'positive-good', href: '/dashboard/sales-analytics' },
-  { key: 'mtdPurchase', label: 'Purchase Value (MTD)', semantics: 'positive-good', href: '/dashboard/purchase-analytics' },
+  { key: 'outstandingReceivables', label: 'Outstanding Receivables', semantics: 'positive-bad' },
+  { key: 'outstandingPayables', label: 'Outstanding Payables', semantics: 'positive-bad' },
+  { key: 'cashInHand', label: 'Cash in Hand', semantics: 'positive-good' },
+  { key: 'bankBalance', label: 'Bank Balance', semantics: 'positive-good' },
+  { key: 'inventoryValue', label: 'Inventory Value', semantics: 'positive-good' },
+  { key: 'gstPayable', label: 'GST Payable', semantics: 'positive-bad' },
+  { key: 'mtdSales', label: 'Sales Value (MTD)', semantics: 'positive-good' },
+  { key: 'mtdPurchase', label: 'Purchase Value (MTD)', semantics: 'positive-good' },
 ];
 
 function CeoSkeleton() {
@@ -46,7 +48,7 @@ function CeoSkeleton() {
       <Skeleton className="h-10 w-72" />
       <Skeleton className="h-28 w-full rounded-xl" />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 12 }).map((_, i) => (
+        {Array.from({ length: 13 }).map((_, i) => (
           <Skeleton key={i} className="h-40 rounded-xl" />
         ))}
       </div>
@@ -84,14 +86,14 @@ export default function CeoDashboardPage() {
   if (error && !data) {
     return (
       <div className="flex min-h-[70vh] items-center justify-center p-6">
-        <Card className="max-w-md text-center">
+        <Card className="max-w-md text-center rounded-[14px] border border-[#E2E8F0] bg-white shadow-sm">
           <CardContent className="p-10">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-rose-50 text-rose-600">
               <AlertTriangle className="h-6 w-6" />
             </div>
-            <h2 className="mt-4 text-lg font-semibold">Couldn&apos;t reach the backend</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Retrying automatically won&apos;t hurt — try again.</p>
-            <Button variant="primary" className="mt-5" onClick={() => void load()}>
+            <h2 className="mt-4 text-lg font-semibold text-[#0F172A]">Couldn&apos;t reach the backend</h2>
+            <p className="mt-1 text-sm text-[#64748B]">Retrying automatically won&apos;t hurt — try again.</p>
+            <Button variant="primary" className="mt-5 bg-[#1D4ED8] hover:bg-[#1E40AF]" onClick={() => void load()}>
               <RefreshCw className="h-4 w-4" /> Retry
             </Button>
           </CardContent>
@@ -102,20 +104,20 @@ export default function CeoDashboardPage() {
 
   if (!data) return <CeoSkeleton />;
 
-  const { today, yesterday, trend7d, lastSync, user, company } = data;
+  const { today, yesterday, lastSync, user, company } = data;
 
-  // Empty state: connected, but no snapshot yet.
+  // Empty state
   if (!today) {
     return (
       <div className="p-4 md:p-8">
         <GreetingHeader name={user.name} fyLabel={company.fyLabel} lastSync={lastSync} onRefreshed={load} />
-        <Card className="mt-6">
+        <Card className="mt-6 rounded-[14px] border border-[#E2E8F0] bg-white shadow-sm">
           <CardContent className="flex flex-col items-center gap-3 p-12 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-primary">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#EFF6FF] text-[#2563EB]">
               <RefreshCw className="h-6 w-6" />
             </div>
-            <h2 className="text-lg font-semibold">No data yet</h2>
-            <p className="max-w-sm text-sm text-muted-foreground">
+            <h2 className="text-lg font-semibold text-[#0F172A]">No data yet</h2>
+            <p className="max-w-sm text-sm text-[#64748B]">
               The sync agent hasn&apos;t sent data yet. Click &quot;Refresh Tally Data&quot; or wait for the next scheduled sync.
             </p>
           </CardContent>
@@ -129,26 +131,52 @@ export default function CeoDashboardPage() {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 6 }}
+      initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.15 }}
-      className="space-y-6 p-4 md:p-8"
+      className="space-y-6 p-6 md:p-8 max-w-[1600px] mx-auto"
     >
-      {/* Action bar */}
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <Button variant="outline" size="sm"><FileDown className="h-4 w-4" /> Export PDF</Button>
-        <Button variant="outline" size="sm"><FileSpreadsheet className="h-4 w-4" /> Export Excel</Button>
-        <Button variant="outline" size="sm"><Printer className="h-4 w-4" /> Print</Button>
-        <Button variant="outline" size="sm"><FileText className="h-4 w-4" /> Daily Business Report</Button>
+      {/* Action buttons row */}
+      <div className="flex flex-wrap items-center justify-end gap-2.5">
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-white px-4 py-2 text-[13px] font-medium text-[#475569] hover:bg-[#F8FAFC] hover:border-[#CBD5E1] transition-colors"
+        >
+          <FileDown className="h-4 w-4 text-[#64748B]" /> Export PDF
+        </button>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-white px-4 py-2 text-[13px] font-medium text-[#475569] hover:bg-[#F8FAFC] hover:border-[#CBD5E1] transition-colors"
+        >
+          <FileSpreadsheet className="h-4 w-4 text-[#64748B]" /> Export Excel
+        </button>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-white px-4 py-2 text-[13px] font-medium text-[#475569] hover:bg-[#F8FAFC] hover:border-[#CBD5E1] transition-colors"
+        >
+          <Printer className="h-4 w-4 text-[#64748B]" /> Print
+        </button>
+        <RefreshButton
+          onRefreshed={load}
+          className="bg-[#1D4ED8] text-white hover:bg-[#1E40AF] shadow-none border-none text-[13px] py-2 px-4"
+        />
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-white px-4 py-2 text-[13px] font-medium text-[#475569] hover:bg-[#F8FAFC] hover:border-[#CBD5E1] transition-colors"
+        >
+          <FileText className="h-4 w-4 text-[#64748B]" /> Daily Business Report
+        </button>
       </div>
 
       {/* Executive Intelligence banner */}
       <GreetingHeader name={user.name} fyLabel={company.fyLabel} lastSync={lastSync} onRefreshed={load} />
 
       {/* Section heading */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold tracking-tight">Business Health Indicators <span className="text-muted-foreground">(13 Key Metrics)</span></h2>
-        <p className="text-xs text-muted-foreground">Status color coded · Click a card for details</p>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-[20px] font-bold text-[#0F172A] tracking-tight">
+          Business Health Indicators <span className="text-[20px] font-normal text-[#94A3B8]">(13 Key Metrics)</span>
+        </h2>
+        <p className="text-[13px] text-[#94A3B8]">Status color coded · Click a card for details</p>
       </div>
 
       {/* KPI grid */}
@@ -157,7 +185,6 @@ export default function CeoDashboardPage() {
           const value = today[cfg.key];
           const prev = yesterday ? yesterday[cfg.key] : undefined;
           const delta = prev !== undefined ? computeDelta(value, prev) : undefined;
-          const sparkline = trend7d.map((s) => s[cfg.key]);
           return (
             <KpiCard
               key={cfg.key}
@@ -167,7 +194,7 @@ export default function CeoDashboardPage() {
               deltaSemantics={cfg.semantics}
               comparisonLabel="Yesterday"
               comparisonValue={prev}
-              sparkline={sparkline}
+              accentColor={cfg.accentColor}
               href={cfg.href}
             />
           );
@@ -176,15 +203,15 @@ export default function CeoDashboardPage() {
 
       {/* Secondary charts */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardContent className="p-5">
-            <h3 className="mb-4 text-sm font-semibold">Sales vs Purchase — Last 12 Months</h3>
+        <Card className="rounded-[14px] border border-[#E2E8F0] bg-[#FFFFFF] p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+          <CardContent className="p-0">
+            <h3 className="mb-4 text-[16px] font-semibold text-[#0F172A]">Sales vs Purchase — Last 12 Months</h3>
             <SalesPurchaseChart data={monthly} />
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-5">
-            <h3 className="mb-4 text-sm font-semibold">Cash Flow Trend — Last 30 Days</h3>
+        <Card className="rounded-[14px] border border-[#E2E8F0] bg-[#FFFFFF] p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+          <CardContent className="p-0">
+            <h3 className="mb-4 text-[16px] font-semibold text-[#0F172A]">Cash Flow Trend — Last 30 Days</h3>
             <CashFlowChart data={cashflow} />
           </CardContent>
         </Card>
@@ -192,31 +219,31 @@ export default function CeoDashboardPage() {
 
       {/* Bottom mini cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Card>
-          <CardContent className="flex items-center gap-4 p-5">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-primary">
+        <Card className="rounded-[14px] border border-[#E2E8F0] bg-[#FFFFFF] p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+          <CardContent className="flex items-center gap-4 p-0">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EFF6FF] text-[#2563EB]">
               <Users className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">New Customers This Month</p>
-              <p className="text-2xl font-bold tabular">{formatIndianNumber(today.newCustomersToday)}</p>
+              <p className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[#64748B]">New Customers This Month</p>
+              <p className="text-[32px] font-bold text-[#0F172A] tabular leading-none mt-1">{formatIndianNumber(today.newCustomersToday)}</p>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 p-5">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-primary">
+        <Card className="rounded-[14px] border border-[#E2E8F0] bg-[#FFFFFF] p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+          <CardContent className="flex items-center gap-4 p-0">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EFF6FF] text-[#2563EB]">
               <ReceiptIndianRupee className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Orders Billed Today</p>
-              <p className="text-2xl font-bold tabular">{formatIndianNumber(today.ordersBilledToday)}</p>
+              <p className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[#64748B]">Orders Billed Today</p>
+              <p className="text-[32px] font-bold text-[#0F172A] tabular leading-none mt-1">{formatIndianNumber(today.ordersBilledToday)}</p>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <p className="pt-2 text-center text-xs text-muted-foreground/70">
+      <p className="pt-2 text-center text-xs text-[#94A3B8]">
         {company.displayName} · Figures reflect the latest Tally sync · Amounts in ₹
       </p>
     </motion.div>

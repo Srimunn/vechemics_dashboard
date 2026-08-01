@@ -13,12 +13,15 @@ export const syncRouter = Router();
 // Validation schemas (mirror @vchemics/shared wire types)
 // ---------------------------------------------------------------------------
 
-const ledgerSchema = z.object({
+const rawLedgerInputSchema = z.object({
   name: z.string().min(1),
-  parentGroup: z.string().default('Unknown'),
-  openingBalance: z.number().default(0),
-  currentBalance: z.number().default(0),
-  isDebit: z.boolean().default(true),
+  parentGroup: z.string().optional(),
+  openingBalance: z.number().optional(),
+  currentBalance: z.number().optional(),
+  amount: z.number().optional(),
+  debit: z.number().optional(),
+  credit: z.number().optional(),
+  isDebit: z.boolean().optional(),
   gstin: z.string().optional(),
   state: z.string().optional(),
 });
@@ -101,8 +104,58 @@ const ingestSchema = z.object({
 // Per-job-type upsert handlers
 // ---------------------------------------------------------------------------
 
-async function ingestLedgers(companyId: string, data: unknown[]): Promise<number> {
-  const ledgers = z.array(ledgerSchema).parse(data);
+async function ingestLedgers(companyId: string, data: unknown[], jobType: string): Promise<number> {
+  const rawItems = z.array(rawLedgerInputSchema).parse(data);
+
+  const ledgers = rawItems.map((item) => {
+    let currentBalance = 0;
+    if (jobType === 'ledger-list') {
+      if (item.debit !== undefined || item.credit !== undefined) {
+        currentBalance = (item.debit ?? 0) - (item.credit ?? 0);
+      } else if (item.amount !== undefined) {
+        currentBalance = item.amount;
+      } else {
+        currentBalance = item.currentBalance ?? 0;
+      }
+    } else if (jobType === 'balance-sheet' || jobType === 'profit-and-loss') {
+      currentBalance = item.amount ?? item.currentBalance ?? 0;
+    } else {
+      currentBalance = item.currentBalance ?? item.amount ?? 0;
+    }
+
+    let parentGroup = item.parentGroup;
+    if (jobType === 'balance-sheet') {
+      if (!parentGroup || parentGroup === 'Unknown' || parentGroup === 'Balance Sheet') {
+        parentGroup = item.name;
+      }
+    } else if (jobType === 'ledger-list') {
+      if (!parentGroup || parentGroup === 'Unknown') {
+        parentGroup = item.name;
+      }
+    } else if (jobType === 'profit-and-loss') {
+      if (!parentGroup || parentGroup === 'Unknown') {
+        parentGroup = 'Profit & Loss';
+      }
+    } else {
+      if (!parentGroup) {
+        parentGroup = 'Unknown';
+      }
+    }
+
+    const openingBalance = item.openingBalance ?? 0;
+    const isDebit = item.isDebit ?? (currentBalance >= 0);
+
+    return {
+      name: item.name,
+      parentGroup,
+      openingBalance,
+      currentBalance,
+      isDebit,
+      gstin: item.gstin ?? null,
+      state: item.state ?? null,
+    };
+  });
+
   const chunkSize = 100;
   for (let i = 0; i < ledgers.length; i += chunkSize) {
     const chunk = ledgers.slice(i, i + chunkSize);
@@ -115,8 +168,8 @@ async function ingestLedgers(companyId: string, data: unknown[]): Promise<number
             openingBalance: l.openingBalance,
             currentBalance: l.currentBalance,
             isDebit: l.isDebit,
-            gstin: l.gstin ?? null,
-            state: l.state ?? null,
+            gstin: l.gstin,
+            state: l.state,
           },
           create: {
             companyId,
@@ -125,8 +178,8 @@ async function ingestLedgers(companyId: string, data: unknown[]): Promise<number
             openingBalance: l.openingBalance,
             currentBalance: l.currentBalance,
             isDebit: l.isDebit,
-            gstin: l.gstin ?? null,
-            state: l.state ?? null,
+            gstin: l.gstin,
+            state: l.state,
           },
         }),
       ),
@@ -297,7 +350,7 @@ syncRouter.post('/ingest', syncAuth, async (req: Request, res: Response) => {
     let ingested = 0;
 
     if (jobType === 'ledger-list' || jobType === 'balance-sheet' || jobType === 'profit-and-loss') {
-      ingested = await ingestLedgers(companyId, data);
+      ingested = await ingestLedgers(companyId, data, jobType);
     } else if ((VOUCHER_JOB_TYPES as readonly string[]).includes(jobType)) {
       ingested = await ingestVouchers(companyId, data);
     } else if (jobType === 'stock-summary') {

@@ -66,21 +66,13 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
   ]);
 
   // --- Ledger sources ----------------------------------------------------
-  // Ledger rows arrive from statement exports, distinguished by parentGroup:
-  //   'Trial Balance' -> one row per account group; `name` IS the group name
-  //   'Profit & Loss' -> one row per P&L line (signed as Tally exports them)
-  //   'Balance Sheet' -> top-level group totals
-  //   anything else   -> real individual ledgers (from a List of Ledgers sync)
   const STATEMENT_GROUPS = new Set(['Trial Balance', 'Balance Sheet', 'Profit & Loss']);
-  const plLedgers = ledgers.filter((l) => l.parentGroup === 'Profit & Loss');
+  const plLedgers = ledgers.filter((l) => l.parentGroup === 'Profit & Loss' || /profit.*loss/i.test(l.parentGroup));
 
-  // Sum a balance category, preferring real per-ledger rows (matched on their
-  // parentGroup), else Trial Balance group rows (matched on their name).
+  // Sum a balance category by matching name or parentGroup
   const categoryTotal = (re: RegExp): number => {
-    const real = ledgers.filter((l) => !STATEMENT_GROUPS.has(l.parentGroup) && re.test(l.parentGroup));
-    if (real.length > 0) return real.reduce((s, l) => s + num(l.currentBalance), 0);
-    const tb = ledgers.filter((l) => l.parentGroup === 'Trial Balance' && re.test(l.name));
-    return tb.reduce((s, l) => s + num(l.currentBalance), 0);
+    const matches = ledgers.filter((l) => re.test(l.name) || re.test(l.parentGroup));
+    return matches.reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0);
   };
 
   // Signed value of a P&L line by name.
@@ -93,14 +85,27 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
   const todaySales = salesToday.reduce((s, v) => s + num(v.amount), 0);
   const todayPurchase = purchaseToday.reduce((s, v) => s + num(v.amount), 0);
   const collectionsToday = receiptsToday.reduce((s, v) => s + num(v.amount), 0);
-  let mtdSales = salesMtd.reduce((s, v) => s + num(v.amount), 0);
-  let mtdPurchase = purchaseMtd.reduce((s, v) => s + num(v.amount), 0);
+
+  const mtdSalesVouchers = salesMtd.reduce((s, v) => s + num(v.amount), 0);
+  const mtdPurchaseVouchers = purchaseMtd.reduce((s, v) => s + num(v.amount), 0);
+
+  const pnlSalesLedgers = ledgers.filter(
+    (l) => /sales/i.test(l.name) && (l.parentGroup === 'Profit & Loss' || /profit.*loss/i.test(l.parentGroup)),
+  );
+  let mtdSales =
+    pnlSalesLedgers.length > 0
+      ? pnlSalesLedgers.reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0)
+      : mtdSalesVouchers;
+
+  const pnlPurchaseLedgers = ledgers.filter(
+    (l) => /purchase/i.test(l.name) && (l.parentGroup === 'Profit & Loss' || /profit.*loss/i.test(l.parentGroup)),
+  );
+  let mtdPurchase =
+    pnlPurchaseLedgers.length > 0
+      ? pnlPurchaseLedgers.reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0)
+      : mtdPurchaseVouchers;
 
   // --- Gross / Net profit ------------------------------------------------
-  // Default: voucher-derived (sales - COGS). When P&L data is present, use it
-  // as the authoritative source (per spec): Gross = Sales + Direct Income +
-  // Cost of Sales (signs preserved, cost is negative); Net = Gross + Indirect
-  // Expenses (indirect is negative). MTD sales/purchase also come from P&L.
   const avgCostByItem = new Map(stockItems.map((s) => [s.name, num(s.avgCost)]));
   let cogs = 0;
   for (const v of salesToday) {
@@ -112,17 +117,16 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
   let todayNetProfit = todayGrossProfit;
 
   if (plLedgers.length > 0) {
-    const plSales = plValue(/^sales account/i);
+    const plSales = plValue(/^sales account|sales/i);
     const plDirectIncome = plValue(/income \(direct\)|direct income/i);
     const plCostOfSales = plValue(/cost of sales/i);
-    const plPurchase = plValue(/purchase account/i);
+    const plPurchase = plValue(/purchase account|purchase/i);
     const plIndirect = plValue(/indirect exp|expenses \(indirect\)/i);
     todayGrossProfit = plSales + plDirectIncome + plCostOfSales;
     todayNetProfit = todayGrossProfit + plIndirect;
-    mtdSales = Math.abs(plSales);
-    mtdPurchase = Math.abs(plPurchase);
+    if (plSales !== 0) mtdSales = Math.abs(plSales);
+    if (plPurchase !== 0) mtdPurchase = Math.abs(plPurchase);
   } else {
-    // No P&L: pro-rate indirect expenses from this month's voucher entries.
     const indirectNames = new Set(
       ledgers.filter((l) => /indirect exp/i.test(l.parentGroup)).map((l) => l.name),
     );
@@ -140,11 +144,11 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
     todayNetProfit = todayGrossProfit - mtdIndirect / daysInMonth(date);
   }
 
-  // --- Balances (Trial Balance groups, or real ledgers). Shown as magnitudes.
-  const cashInHand = Math.abs(categoryTotal(/cash.?in.?hand|^cash accounts?$/i));
-  const bankBalance = Math.abs(categoryTotal(/bank/i));
+  // --- Balances ---
+  const cashInHand = categoryTotal(/cash.?in.?hand|^cash accounts?$|^cash$/i);
+  const bankBalance = categoryTotal(/bank/i);
 
-  // --- GST payable: output - input ledgers, else the Duties & Taxes net -----
+  // --- GST payable ---
   const gstNamed = ledgers.filter((l) => /output|input/i.test(l.name) && /gst/i.test(l.name));
   let gstPayable;
   if (gstNamed.length > 0) {
@@ -169,19 +173,21 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
     }
   }
 
-  // --- Outstandings (bills reports, else Trial Balance groups) & inventory --
+  // --- Outstandings ---
   let outstandingReceivables = outstandings
     .filter((o) => o.type === 'receivable')
     .reduce((s, o) => s + num(o.pendingAmount), 0);
   if (outstandingReceivables === 0) {
-    outstandingReceivables = Math.abs(categoryTotal(/sundry debtor|account.?receivable|receivable/i));
+    outstandingReceivables = categoryTotal(/sundry debtor|account.?receivable|receivable/i);
   }
+
   let outstandingPayables = outstandings
     .filter((o) => o.type === 'payable')
     .reduce((s, o) => s + num(o.pendingAmount), 0);
   if (outstandingPayables === 0) {
-    outstandingPayables = Math.abs(categoryTotal(/sundry creditor|account.?payable|payable/i));
+    outstandingPayables = categoryTotal(/sundry creditor|account.?payable|payable/i);
   }
+
   const inventoryValue = stockItems.reduce((s, i) => s + num(i.closingValue), 0);
 
   // --- Counts ---

@@ -592,3 +592,24 @@ syncRouter.post('/recalculate-costs', requireUser, async (_req: Request, res: Re
     res.status(500).json({ error: 'Recalculation failed', detail: String(err) });
   }
 });
+
+// ---------------------------------------------------------------------------
+// POST /api/sync/refresh-kpi  (delete today's snapshot and recompute)
+// ---------------------------------------------------------------------------
+
+syncRouter.post('/refresh-kpi', requireUser, async (_req: Request, res: Response) => {
+  try {
+    const companyId = await ensureCompanyId();
+    const today = new Date();
+    const dayStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+
+    await prisma.kpiSnapshot.deleteMany({
+      where: { companyId, snapshotDate: dayStart },
+    });
+
+    await recomputeTodaySnapshot(companyId);
+    res.json({ ok: true, message: 'KPI snapshot refreshed' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to refresh KPI', detail: String(err) });
+  }
+});

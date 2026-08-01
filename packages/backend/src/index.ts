@@ -11,6 +11,8 @@ import { authRouter } from './routes/auth.js';
 import { billPnlRouter } from './routes/bill-pnl.js';
 import { analyticsRouter } from './routes/analytics.js';
 import { exportRouter } from './routes/export.js';
+import { reportsRouter } from './routes/reports.js';
+import { auditRouter } from './routes/audit.js';
 
 const app = express();
 
@@ -39,6 +41,8 @@ app.use('/api/auth', authRouter);
 app.use('/api/bill-pnl', billPnlRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/export', exportRouter);
+app.use('/api/reports', reportsRouter);
+app.use('/api/audit', auditRouter);
 
 async function bootstrap(): Promise<void> {
   // First-boot convenience: create the CEO login if the DB has no users yet.

@@ -444,3 +444,82 @@ analyticsRouter.get('/financial-overview', requireUser, async (req: Request, res
     res.status(500).json({ error: 'Failed to fetch financial overview', detail: String(err) });
   }
 });
+
+// --- 10. GST Summary (`GET /api/analytics/gst`) ---
+analyticsRouter.get('/gst', requireUser, async (req: Request, res: Response) => {
+  try {
+    const companyId = await ensureCompanyId();
+    const gstEntries = await prisma.voucherLedgerEntry.findMany({
+      where: {
+        voucher: { companyId, isCancelled: false },
+        ledgerName: { contains: 'GST', mode: 'insensitive' },
+      },
+      include: { voucher: true },
+    });
+
+    let outputCgst = 0;
+    let outputSgst = 0;
+    let outputIgst = 0;
+    let inputCgst = 0;
+    let inputSgst = 0;
+    let inputIgst = 0;
+
+    const monthlyMap: Record<string, { month: string; output: number; input: number; net: number }> = {};
+
+    gstEntries.forEach((e) => {
+      const name = e.ledgerName.toUpperCase();
+      const amt = num(e.amount);
+      const isOutput = name.includes('OUTPUT') || (!e.isDebit && e.voucher.voucherType === 'Sales');
+      const isInput = name.includes('INPUT') || (e.isDebit && e.voucher.voucherType === 'Purchase');
+
+      if (name.includes('CGST')) {
+        if (isOutput) outputCgst += amt;
+        else if (isInput) inputCgst += amt;
+      } else if (name.includes('SGST')) {
+        if (isOutput) outputSgst += amt;
+        else if (isInput) inputSgst += amt;
+      } else if (name.includes('IGST')) {
+        if (isOutput) outputIgst += amt;
+        else if (isInput) inputIgst += amt;
+      } else {
+        if (isOutput) outputCgst += amt / 2;
+        else if (isInput) inputCgst += amt / 2;
+      }
+
+      const monthKey = e.voucher.date.toISOString().slice(0, 7);
+      if (!monthlyMap[monthKey]) {
+        monthlyMap[monthKey] = { month: monthKey, output: 0, input: 0, net: 0 };
+      }
+      if (isOutput) monthlyMap[monthKey].output += amt;
+      if (isInput) monthlyMap[monthKey].input += amt;
+    });
+
+    const monthlyBreakdown = Object.values(monthlyMap).map((m) => ({
+      month: m.month,
+      output: Math.round(m.output * 100) / 100,
+      input: Math.round(m.input * 100) / 100,
+      net: Math.round((m.output - m.input) * 100) / 100,
+    })).sort((a, b) => a.month.localeCompare(b.month));
+
+    const totalOutput = outputCgst + outputSgst + outputIgst;
+    const totalInput = inputCgst + inputSgst + inputIgst;
+    const netGstPayable = Math.max(0, totalOutput - totalInput);
+
+    res.json({
+      summary: {
+        outputCgst: Math.round(outputCgst * 100) / 100,
+        outputSgst: Math.round(outputSgst * 100) / 100,
+        outputIgst: Math.round(outputIgst * 100) / 100,
+        inputCgst: Math.round(inputCgst * 100) / 100,
+        inputSgst: Math.round(inputSgst * 100) / 100,
+        inputIgst: Math.round(inputIgst * 100) / 100,
+        totalOutput: Math.round(totalOutput * 100) / 100,
+        totalInput: Math.round(totalInput * 100) / 100,
+        netGstPayable: Math.round(netGstPayable * 100) / 100,
+      },
+      monthlyBreakdown,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch GST analytics', detail: String(err) });
+  }
+});

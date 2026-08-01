@@ -38,6 +38,10 @@ const voucherItemSchema = z.object({
   unit: z.string().default(''),
   rate: z.number().default(0),
   amount: z.number().default(0),
+  costRate: z.number().optional(),
+  costAmount: z.number().optional(),
+  profit: z.number().optional(),
+  marginPct: z.number().optional(),
   gstRate: z.number().optional(),
   hsnCode: z.string().optional(),
 });

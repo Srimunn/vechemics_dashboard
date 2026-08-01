@@ -1,14 +1,5 @@
-import { ComingSoonPage } from "@/components/layout/ComingSoonPage";
-import { findNavItem } from "@/lib/nav";
+import { redirect } from 'next/navigation';
 
 export default function Page() {
-  const item = findNavItem("/dashboard/product-profitability");
-  return (
-    <ComingSoonPage
-      title={item?.title ?? "Module"}
-      plannedFor={item?.phase ?? "Phase 2"}
-      description={item?.description}
-      icon={item?.icon}
-    />
-  );
+  redirect('/dashboard/bill-pnl');
 }

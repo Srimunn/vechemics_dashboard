@@ -64,6 +64,10 @@ model VoucherItem {
   unit          String
   rate          Decimal  @db.Decimal(18, 4)
   amount        Decimal  @db.Decimal(18, 2)
+  costRate      Decimal? @db.Decimal(18, 4)
+  costAmount    Decimal? @db.Decimal(18, 2)
+  profit        Decimal? @db.Decimal(18, 2)
+  marginPct     Decimal? @db.Decimal(5, 2)
   gstRate       Decimal? @db.Decimal(5, 2) // e.g. 18.00
   hsnCode       String?
 

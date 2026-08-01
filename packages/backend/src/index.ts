@@ -8,6 +8,9 @@ import { ensureSeedUser } from './lib/seed-user.js';
 import { syncRouter } from './routes/sync.js';
 import { dashboardRouter } from './routes/dashboard.js';
 import { authRouter } from './routes/auth.js';
+import { billPnlRouter } from './routes/bill-pnl.js';
+import { analyticsRouter } from './routes/analytics.js';
+import { exportRouter } from './routes/export.js';
 
 const app = express();
 
@@ -33,6 +36,9 @@ app.get('/health', async (_req, res) => {
 app.use('/api/sync', syncRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/bill-pnl', billPnlRouter);
+app.use('/api/analytics', analyticsRouter);
+app.use('/api/export', exportRouter);
 
 async function bootstrap(): Promise<void> {
   // First-boot convenience: create the CEO login if the DB has no users yet.

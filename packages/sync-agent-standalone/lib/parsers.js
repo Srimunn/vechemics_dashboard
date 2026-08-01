@@ -117,6 +117,76 @@ function normalizeVoucherType(raw) {
   return null;
 }
 
+function parseInventoryEntries(v) {
+  const rawLists = [
+    ...toArray(v['ALLINVENTORYENTRIES.LIST']),
+    ...toArray(v['INVENTORYENTRIES.LIST']),
+    ...toArray(v['INVENTORYENTRIESIN.LIST']),
+    ...toArray(v['INVENTORYENTRIESOUT.LIST']),
+  ];
+  if (rawLists.length > 0) {
+    return rawLists.map((itemNode) => {
+      const name = text(itemNode.STOCKITEMNAME);
+      const r = parseRateUnit(itemNode.RATE);
+      const q = parseQtyUnit(itemNode.ACTUALQTY || itemNode.BILLEDQTY);
+      const amt = absAmount(itemNode.AMOUNT);
+      const gstRate = Number.parseFloat(text(itemNode.GSTRATE)) || undefined;
+      const hsnCode = text(itemNode.HSNCODE || itemNode.HSNMASTERNAME) || undefined;
+      return {
+        stockItemName: name,
+        quantity: q.quantity,
+        unit: q.unit || r.unit,
+        rate: r.rate || (q.quantity > 0 ? amt / q.quantity : 0),
+        amount: amt,
+        ...(gstRate ? { gstRate } : {}),
+        ...(hsnCode ? { hsnCode } : {}),
+      };
+    }).filter((i) => i.stockItemName);
+  }
+
+  const stockNames = toArray(v.STOCKITEMNAME);
+  const rates = toArray(v.RATE);
+  const qtys = toArray(v.ACTUALQTY || v.BILLEDQTY);
+  const amounts = toArray(v.AMOUNT);
+
+  return stockNames.map((name, i) => {
+    const r = parseRateUnit(rates[i]);
+    const q = parseQtyUnit(qtys[i]);
+    const amt = absAmount(amounts[i]);
+    return {
+      stockItemName: text(name),
+      quantity: q.quantity,
+      unit: q.unit || r.unit,
+      rate: r.rate || (q.quantity > 0 ? amt / q.quantity : 0),
+      amount: amt,
+    };
+  }).filter((i) => i.stockItemName);
+}
+
+function parseLedgerEntries(v) {
+  const rawLists = [
+    ...toArray(v['ALLLEDGERENTRIES.LIST']),
+    ...toArray(v['LEDGERENTRIES.LIST']),
+  ];
+  if (rawLists.length > 0) {
+    return rawLists.map((e) => {
+      const ln = text(e.LEDGERNAME);
+      const signed = amount(e.AMOUNT);
+      return { ledgerName: ln, amount: Math.abs(signed), isDebit: signed >= 0 };
+    }).filter((e) => e.ledgerName);
+  }
+
+  const ledgerNames = toArray(v.LEDGERNAME);
+  const amounts = toArray(v.AMOUNT);
+  const stockNames = toArray(v.STOCKITEMNAME);
+  const stockCount = stockNames.length;
+
+  return ledgerNames.map((ln, j) => {
+    const signed = amount(amounts[stockCount + j]);
+    return { ledgerName: text(ln), amount: Math.abs(signed), isDebit: signed >= 0 };
+  }).filter((e) => e.ledgerName);
+}
+
 function parseVouchers(parsed, restrictTo) {
   const vouchers = deepCollect(parsed, 'VOUCHER');
   const out = [];
@@ -132,29 +202,8 @@ function parseVouchers(parsed, restrictTo) {
       v['@_VCHKEY'] || v['@_REMOTEID'] || text(v.GUID) || text(v.MASTERID) ||
       `${vType}:${voucherNumber}:${dateIso}`;
 
-    const stockNames = toArray(v.STOCKITEMNAME);
-    const rates = toArray(v.RATE);
-    const qtys = toArray(v.ACTUALQTY);
-    const ledgerNames = toArray(v.LEDGERNAME);
-    const amounts = toArray(v.AMOUNT);
-    const stockCount = stockNames.length;
-
-    const items = stockNames.map((name, i) => {
-      const r = parseRateUnit(rates[i]);
-      const q = parseQtyUnit(qtys[i]);
-      return {
-        stockItemName: text(name),
-        quantity: q.quantity,
-        unit: q.unit || r.unit,
-        rate: r.rate,
-        amount: absAmount(amounts[i]),
-      };
-    });
-
-    const ledgerEntries = ledgerNames.map((ln, j) => {
-      const signed = amount(amounts[stockCount + j]);
-      return { ledgerName: text(ln), amount: Math.abs(signed), isDebit: signed >= 0 };
-    });
+    const items = parseInventoryEntries(v);
+    const ledgerEntries = parseLedgerEntries(v);
 
     const total = ledgerEntries.length
       ? ledgerEntries.reduce((mx, e) => Math.max(mx, e.amount), 0)
@@ -310,20 +359,27 @@ function extractKpiDirect({
   let outstandingReceivables = receivables.reduce((s, r) => s + (r.pendingAmount || 0), 0);
   let outstandingPayables = payables.reduce((s, p) => s + (p.pendingAmount || 0), 0);
 
-  const findLedgerBal = (re) => {
-    const row = ledgers.find((l) => re.test(l.name) || re.test(l.parentGroup));
-    return row ? Math.abs(row.currentBalance) : 0;
+  const findSumLedgerBal = (re) => {
+    return ledgers
+      .filter((l) => re.test(l.name) || re.test(l.parentGroup))
+      .reduce((s, l) => s + Math.abs(l.currentBalance || 0), 0);
   };
 
-  const bankBalance = findLedgerBal(/bank/i);
-  const cashInHand = findLedgerBal(/cash.?in.?hand|^cash$/i);
-  const gstPayable = findLedgerBal(/duties.*tax|gst/i);
+  const bankBalance = findSumLedgerBal(/bank/i);
+  const cashInHand = findSumLedgerBal(/cash.?in.?hand|^cash$/i);
+  
+  const gstOutput = ledgers.filter((l) => /output/i.test(l.name)).reduce((s, l) => s + Math.abs(l.currentBalance || 0), 0);
+  const gstInput = ledgers.filter((l) => /input/i.test(l.name)).reduce((s, l) => s + Math.abs(l.currentBalance || 0), 0);
+  let gstPayable = gstOutput - gstInput;
+  if (gstPayable <= 0) {
+    gstPayable = findSumLedgerBal(/duties.*tax|gst/i);
+  }
 
   if (outstandingReceivables === 0) {
-    outstandingReceivables = findLedgerBal(/sundry debtor|debtor/i);
+    outstandingReceivables = findSumLedgerBal(/sundry debtor|debtor/i);
   }
   if (outstandingPayables === 0) {
-    outstandingPayables = findLedgerBal(/sundry creditor|creditor/i);
+    outstandingPayables = findSumLedgerBal(/sundry creditor|creditor/i);
   }
 
   const salesTodayVouchers = vouchersToday.filter((v) => v.voucherType === 'Sales');

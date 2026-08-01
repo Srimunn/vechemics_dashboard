@@ -34,17 +34,52 @@ async function main() {
   let failures = 0;
   const collected = {};
 
+  // Step 1: Execute all Tally queries and collect parsed data
   for (const job of jobs) {
     try {
       const { parsed } = await callTally(job.xml, job.name);
-      const data = job.parse(parsed);
-      collected[job.name] = data;
-      const sent = await push(syncId, job.jobType, data);
+      collected[job.name] = job.parse(parsed);
+    } catch (err) {
+      failures++;
+      console.error(`[${job.name}] Tally fetch FAILED: ${err.message}`);
+    }
+  }
+
+  // Step 2: Build Stock Item Cost map
+  const stockMap = new Map();
+  (collected['stock-summary'] || []).forEach((item) => {
+    stockMap.set(item.name.toLowerCase().trim(), item.avgCost || 0);
+  });
+
+  // Step 3: Enrich Sales Vouchers with item cost, profit, and margin
+  const enrichVouchers = (vouchers) => {
+    if (!Array.isArray(vouchers)) return;
+    vouchers.forEach((v) => {
+      if (v.voucherType === 'Sales' && Array.isArray(v.items)) {
+        v.items.forEach((item) => {
+          const avgCost = stockMap.get(item.stockItemName.toLowerCase().trim()) || (item.rate * 0.8);
+          item.costRate = avgCost;
+          item.costAmount = Math.round(avgCost * item.quantity * 100) / 100;
+          item.profit = Math.round((item.amount - item.costAmount) * 100) / 100;
+          item.marginPct = item.amount > 0 ? Math.round((item.profit / item.amount) * 10000) / 100 : 0;
+        });
+      }
+    });
+  };
+
+  enrichVouchers(collected['voucher-register-sales']);
+  enrichVouchers(collected['day-book']);
+
+  // Step 4: Push collected payloads to backend
+  for (const job of jobs) {
+    if (!collected[job.name]) continue;
+    try {
+      const sent = await push(syncId, job.jobType, collected[job.name]);
       totalRecords += sent;
       console.log(`[${job.name}] -> ${job.jobType}: pushed ${sent} record(s)`);
     } catch (err) {
       failures++;
-      console.error(`[${job.name}] FAILED: ${err.message}`);
+      console.error(`[${job.name}] Push FAILED: ${err.message}`);
     }
   }
 

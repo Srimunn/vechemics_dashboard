@@ -54,6 +54,10 @@ export interface VoucherItem {
   unit: string;
   rate: number;
   amount: number;
+  costRate?: number;
+  costAmount?: number;
+  profit?: number;
+  marginPct?: number;
   /** e.g. 18 for 18% GST; undefined when Tally didn't report a rate. */
   gstRate?: number;
   hsnCode?: string;

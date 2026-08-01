@@ -34,6 +34,10 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Analytics',
     items: [
       {
+        title: 'Bill-wise P&L', href: '/dashboard/bill-pnl', icon: TrendingUp,
+        phase: 'Phase 2', description: 'Profit and loss calculated for every single sales invoice with item-level breakdown.',
+      },
+      {
         title: 'Product Profitability', href: '/dashboard/product-profitability', icon: TrendingUp,
         phase: 'Phase 3', description: 'Margin and contribution analysis per product and grade, using bill-wise cost of goods sold.',
       },

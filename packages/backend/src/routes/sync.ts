@@ -13,14 +13,20 @@ export const syncRouter = Router();
 // Validation schemas (mirror @vchemics/shared wire types)
 // ---------------------------------------------------------------------------
 
+const optionalCoercedNumber = z.union([z.number(), z.string()]).optional().transform((v) => {
+  if (v === undefined || v === null || v === '') return undefined;
+  const n = typeof v === 'number' ? v : parseFloat(String(v));
+  return Number.isFinite(n) ? n : undefined;
+});
+
 const rawLedgerInputSchema = z.object({
   name: z.string().min(1),
   parentGroup: z.string().optional(),
-  openingBalance: z.number().optional(),
-  currentBalance: z.number().optional(),
-  amount: z.number().optional(),
-  debit: z.number().optional(),
-  credit: z.number().optional(),
+  openingBalance: optionalCoercedNumber,
+  currentBalance: optionalCoercedNumber,
+  amount: optionalCoercedNumber,
+  debit: optionalCoercedNumber,
+  credit: optionalCoercedNumber,
   isDebit: z.boolean().optional(),
   gstin: z.string().optional(),
   state: z.string().optional(),

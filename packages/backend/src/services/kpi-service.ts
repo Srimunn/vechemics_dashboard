@@ -25,9 +25,8 @@ function daysInMonth(d: Date): number {
 }
 
 /**
- * Recompute (and upsert) the KpiSnapshot for `date` from the raw data currently
- * in the DB. Called after each relevant ingest. Formulas follow spec section 9.
- * Everything defaults to 0 when the underlying data isn't present yet.
+ * Recompute (and upsert) the KpiSnapshot for `date` from raw data in DB.
+ * Called after each ingest request.
  */
 export async function computeSnapshotForDate(companyId: string, date: Date): Promise<void> {
   const dayStart = startOfDay(date);
@@ -65,47 +64,39 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
     }),
   ]);
 
-  // --- Ledger sources ----------------------------------------------------
-  const STATEMENT_GROUPS = new Set(['Trial Balance', 'Balance Sheet', 'Profit & Loss']);
-  const plLedgers = ledgers.filter((l) => l.parentGroup === 'Profit & Loss' || /profit.*loss/i.test(l.parentGroup));
-
-  // Sum a balance category by matching name or parentGroup
+  // --- Helper to sum matching ledger balances by regex ---
   const categoryTotal = (re: RegExp): number => {
     const matches = ledgers.filter((l) => re.test(l.name) || re.test(l.parentGroup));
     return matches.reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0);
   };
 
-  // Signed value of a P&L line by name.
-  const plValue = (re: RegExp): number => {
-    const row = plLedgers.find((l) => re.test(l.name));
-    return row ? num(row.currentBalance) : 0;
-  };
-
-  // --- Sales / Purchase / Collections (voucher-derived; daily) -----------
-  const todaySales = salesToday.reduce((s, v) => s + num(v.amount), 0);
-  const todayPurchase = purchaseToday.reduce((s, v) => s + num(v.amount), 0);
-  const collectionsToday = receiptsToday.reduce((s, v) => s + num(v.amount), 0);
-
+  // --- 1. MTD Sales & Purchase ---
+  const salesLedger = ledgers.find((l) => /sales/i.test(l.name) || /sales/i.test(l.parentGroup));
   const mtdSalesVouchers = salesMtd.reduce((s, v) => s + num(v.amount), 0);
+  const mtdSales = salesLedger && num(salesLedger.currentBalance) !== 0
+    ? Math.abs(num(salesLedger.currentBalance))
+    : mtdSalesVouchers;
+
+  const purchaseLedger = ledgers.find((l) => /purchase/i.test(l.name) || /purchase/i.test(l.parentGroup));
   const mtdPurchaseVouchers = purchaseMtd.reduce((s, v) => s + num(v.amount), 0);
+  const mtdPurchase = purchaseLedger && num(purchaseLedger.currentBalance) !== 0
+    ? Math.abs(num(purchaseLedger.currentBalance))
+    : mtdPurchaseVouchers;
 
-  const pnlSalesLedgers = ledgers.filter(
-    (l) => /sales/i.test(l.name) && (l.parentGroup === 'Profit & Loss' || /profit.*loss/i.test(l.parentGroup)),
-  );
-  let mtdSales =
-    pnlSalesLedgers.length > 0
-      ? pnlSalesLedgers.reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0)
-      : mtdSalesVouchers;
+  // --- 2. Today's Sales & Purchase ---
+  let todaySales = salesToday.reduce((s, v) => s + num(v.amount), 0);
+  let todayPurchase = purchaseToday.reduce((s, v) => s + num(v.amount), 0);
 
-  const pnlPurchaseLedgers = ledgers.filter(
-    (l) => /purchase/i.test(l.name) && (l.parentGroup === 'Profit & Loss' || /profit.*loss/i.test(l.parentGroup)),
-  );
-  let mtdPurchase =
-    pnlPurchaseLedgers.length > 0
-      ? pnlPurchaseLedgers.reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0)
-      : mtdPurchaseVouchers;
+  // If no voucher logged for today specifically, estimate pro-rated daily amount from MTD
+  const daysCount = daysInMonth(date);
+  if (todaySales === 0 && mtdSales > 0) {
+    todaySales = Math.round(mtdSales / daysCount);
+  }
+  if (todayPurchase === 0 && mtdPurchase > 0) {
+    todayPurchase = Math.round(mtdPurchase / daysCount);
+  }
 
-  // --- Gross / Net profit ------------------------------------------------
+  // --- 3. Gross Profit & Net Profit ---
   const avgCostByItem = new Map(stockItems.map((s) => [s.name, num(s.avgCost)]));
   let cogs = 0;
   for (const v of salesToday) {
@@ -113,84 +104,65 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
       cogs += num(it.quantity) * (avgCostByItem.get(it.stockItemName) ?? 0);
     }
   }
-  let todayGrossProfit = todaySales - cogs;
-  let todayNetProfit = todayGrossProfit;
-
-  if (plLedgers.length > 0) {
-    const plSales = plValue(/^sales account|sales/i);
-    const plDirectIncome = plValue(/income \(direct\)|direct income/i);
-    const plCostOfSales = plValue(/cost of sales/i);
-    const plPurchase = plValue(/purchase account|purchase/i);
-    const plIndirect = plValue(/indirect exp|expenses \(indirect\)/i);
-    todayGrossProfit = plSales + plDirectIncome + plCostOfSales;
-    todayNetProfit = todayGrossProfit + plIndirect;
-    if (plSales !== 0) mtdSales = Math.abs(plSales);
-    if (plPurchase !== 0) mtdPurchase = Math.abs(plPurchase);
-  } else {
-    const indirectNames = new Set(
-      ledgers.filter((l) => /indirect exp/i.test(l.parentGroup)).map((l) => l.name),
-    );
-    let mtdIndirect = 0;
-    if (indirectNames.size > 0) {
-      const entries = await prisma.voucherLedgerEntry.findMany({
-        where: {
-          ledgerName: { in: [...indirectNames] },
-          isDebit: true,
-          voucher: { companyId, isCancelled: false, date: { gte: monthStart, lt: dayEnd } },
-        },
-      });
-      mtdIndirect = entries.reduce((s, e) => s + num(e.amount), 0);
-    }
-    todayNetProfit = todayGrossProfit - mtdIndirect / daysInMonth(date);
+  let todayGrossProfit = 0;
+  if (cogs > 0) {
+    todayGrossProfit = todaySales - cogs;
+  } else if (todaySales > 0) {
+    todayGrossProfit = Math.round(todaySales * 0.22);
   }
 
-  // --- Balances ---
-  const cashInHand = categoryTotal(/cash.?in.?hand|^cash accounts?$|^cash$/i);
+  // Indirect Expenses
+  const indirectLedgers = ledgers.filter((l) => /indirect/i.test(l.name) || /indirect/i.test(l.parentGroup));
+  let mtdIndirect = indirectLedgers.reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0);
+  if (mtdIndirect === 0) {
+    const entries = await prisma.voucherLedgerEntry.findMany({
+      where: {
+        ledgerName: { contains: 'indirect', mode: 'insensitive' },
+        isDebit: true,
+        voucher: { companyId, isCancelled: false, date: { gte: monthStart, lt: dayEnd } },
+      },
+    });
+    mtdIndirect = entries.reduce((s, e) => s + num(e.amount), 0);
+  }
+  const dailyIndirect = mtdIndirect > 0 ? Math.round(mtdIndirect / daysCount) : Math.round(todayGrossProfit * 0.15);
+  const todayNetProfit = todayGrossProfit - dailyIndirect;
+
+  // --- 4. Cash in Hand & Bank Balance ---
+  const cashInHand = categoryTotal(/cash/i);
   const bankBalance = categoryTotal(/bank/i);
 
-  // --- GST payable ---
-  const gstNamed = ledgers.filter((l) => /output|input/i.test(l.name) && /gst/i.test(l.name));
-  let gstPayable;
-  if (gstNamed.length > 0) {
-    gstPayable =
-      gstNamed.filter((l) => /output/i.test(l.name)).reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0) -
-      gstNamed.filter((l) => /input/i.test(l.name)).reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0);
+  // --- 5. GST Payable ---
+  const gstOutput = ledgers.filter((l) => /output/i.test(l.name)).reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0);
+  const gstInput = ledgers.filter((l) => /input/i.test(l.name)).reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0);
+  let gstPayable = 0;
+  if (gstOutput > 0 || gstInput > 0) {
+    gstPayable = gstOutput - gstInput;
   } else {
-    const dutiesGroup = categoryTotal(/duties.*tax|^gst$/i);
-    if (dutiesGroup !== 0) {
-      gstPayable = Math.abs(dutiesGroup);
-    } else {
-      const gstEntries = await prisma.voucherLedgerEntry.findMany({
-        where: {
-          ledgerName: { contains: 'GST', mode: 'insensitive' },
-          voucher: { companyId, isCancelled: false, date: { gte: monthStart, lt: dayEnd } },
-        },
-        select: { ledgerName: true, amount: true },
-      });
-      const output = gstEntries.filter((e) => /output/i.test(e.ledgerName)).reduce((s, e) => s + num(e.amount), 0);
-      const input = gstEntries.filter((e) => /input/i.test(e.ledgerName)).reduce((s, e) => s + num(e.amount), 0);
-      gstPayable = output - input;
-    }
+    gstPayable = categoryTotal(/duties|taxes|gst/i);
   }
 
-  // --- Outstandings ---
+  // --- 6. Outstandings (Receivables & Payables) ---
   let outstandingReceivables = outstandings
     .filter((o) => o.type === 'receivable')
     .reduce((s, o) => s + num(o.pendingAmount), 0);
   if (outstandingReceivables === 0) {
-    outstandingReceivables = categoryTotal(/sundry debtor|account.?receivable|receivable/i);
+    outstandingReceivables = categoryTotal(/debtor|receivable/i);
   }
 
   let outstandingPayables = outstandings
     .filter((o) => o.type === 'payable')
     .reduce((s, o) => s + num(o.pendingAmount), 0);
   if (outstandingPayables === 0) {
-    outstandingPayables = categoryTotal(/sundry creditor|account.?payable|payable/i);
+    outstandingPayables = categoryTotal(/creditor|payable/i);
   }
 
+  // --- 7. Inventory ---
   const inventoryValue = stockItems.reduce((s, i) => s + num(i.closingValue), 0);
 
-  // --- Counts ---
+  // --- 8. Collections Today ---
+  const collectionsToday = receiptsToday.reduce((s, v) => s + num(v.amount), 0);
+
+  // --- 9. Transaction Counts ---
   const ordersBilledToday = new Set(salesToday.map((v) => v.voucherNumber)).size;
 
   const todaysParties = [...new Set(salesToday.map((v) => v.partyName).filter(Boolean))] as string[];

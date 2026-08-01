@@ -9,6 +9,13 @@ import { recomputeTodaySnapshot } from '../services/kpi-service.js';
 
 export const syncRouter = Router();
 
+function num(x: unknown): number {
+  if (x === null || x === undefined) return 0;
+  if (typeof x === 'number') return x;
+  const n = Number((x as { toString(): string }).toString());
+  return Number.isFinite(n) ? n : 0;
+}
+
 // ---------------------------------------------------------------------------
 // Validation schemas (mirror @vchemics/shared wire types)
 // ---------------------------------------------------------------------------
@@ -505,10 +512,83 @@ syncRouter.get('/pending-trigger', syncAuth, async (_req: Request, res: Response
     return;
   }
 
-  await prisma.syncTrigger.update({
-    where: { id: pending.id },
-    data: { consumedAt: new Date() },
-  });
-
   res.json({ trigger: pending });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/sync/recalculate-costs  (recalculate all item costs & margins)
+// ---------------------------------------------------------------------------
+
+syncRouter.post('/recalculate-costs', requireUser, async (_req: Request, res: Response) => {
+  try {
+    const companyId = await ensureCompanyId();
+
+    // 1. Calculate weighted average cost from Purchase vouchers
+    const purchaseItems = await prisma.voucherItem.findMany({
+      where: { voucher: { companyId, voucherType: 'Purchase', isCancelled: false } },
+    });
+
+    const totalsMap = new Map<string, { totalAmount: number; totalQty: number }>();
+    purchaseItems.forEach((item) => {
+      const key = item.stockItemName.trim().toLowerCase();
+      if (!key) return;
+      const curr = totalsMap.get(key) || { totalAmount: 0, totalQty: 0 };
+      curr.totalAmount += num(item.amount);
+      curr.totalQty += num(item.quantity);
+      totalsMap.set(key, curr);
+    });
+
+    // 2. Update StockItem.avgCost
+    const stockItems = await prisma.stockItem.findMany({ where: { companyId } });
+    const avgCostMap = new Map<string, number>();
+
+    for (const item of stockItems) {
+      const key = item.name.trim().toLowerCase();
+      const purchase = totalsMap.get(key);
+      let avgCost = num(item.avgCost);
+      if (purchase && purchase.totalQty > 0) {
+        avgCost = purchase.totalAmount / purchase.totalQty;
+        await prisma.stockItem.update({
+          where: { id: item.id },
+          data: { avgCost },
+        });
+      }
+      avgCostMap.set(key, avgCost);
+    }
+
+    // 3. Update Sales VoucherItems
+    const salesItems = await prisma.voucherItem.findMany({
+      where: { voucher: { companyId, voucherType: 'Sales', isCancelled: false } },
+    });
+
+    let updatedCount = 0;
+    for (const item of salesItems) {
+      const key = item.stockItemName.trim().toLowerCase();
+      const saleAmount = num(item.amount);
+      const qty = num(item.quantity);
+      const saleRate = num(item.rate) || (qty > 0 ? saleAmount / qty : 0);
+
+      const dbCost = avgCostMap.get(key) || 0;
+      const isEstimated = dbCost === 0;
+      const costRate = isEstimated ? saleRate * 0.8 : dbCost;
+      const costAmount = costRate * qty;
+      const profit = saleAmount - costAmount;
+      const marginPct = saleAmount > 0 ? (profit / saleAmount) * 100 : 0;
+
+      await prisma.voucherItem.update({
+        where: { id: item.id },
+        data: {
+          costRate,
+          costAmount,
+          profit,
+          marginPct,
+        },
+      });
+      updatedCount++;
+    }
+
+    res.json({ ok: true, updatedCount });
+  } catch (err) {
+    res.status(500).json({ error: 'Recalculation failed', detail: String(err) });
+  }
 });

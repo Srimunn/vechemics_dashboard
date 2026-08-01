@@ -42,6 +42,7 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
     receiptsToday,
     salesMtd,
     purchaseMtd,
+    allLedgerEntries,
   ] = await Promise.all([
     prisma.ledger.findMany({ where: { companyId } }),
     prisma.stockItem.findMany({ where: { companyId } }),
@@ -63,6 +64,9 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
     prisma.voucher.findMany({
       where: { companyId, voucherType: 'Purchase', isCancelled: false, date: { gte: monthStart, lt: dayEnd } },
     }),
+    prisma.voucherLedgerEntry.findMany({
+      where: { voucher: { companyId, isCancelled: false } },
+    }),
   ]);
 
   // --- Aggregate vouchers by type ---
@@ -82,7 +86,6 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
     mtdSales = salesTotalSum;
   }
 
-  // Check ledger for "Add: Purchase Accounts" (-19661092.4) or purchase vouchers
   let mtdPurchase = purchaseMtd.reduce((s, v) => s + num(v.amount), 0);
   if (mtdPurchase === 0) {
     const purchaseLedger = ledgers.find((l) => /purchase/i.test(l.name));
@@ -112,18 +115,34 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
   const todayNetProfit = Math.round(todayGrossProfit * 0.9);
 
   // --- 4. Balances & Outstandings ---
-  // Bank Balance: sum of Receipts - sum of Payments (net cash flow)
+  // Bank Balance: ledger balances sum or voucher entries sum
   const categoryBank = ledgers
     .filter((l) => /bank/i.test(l.name) || /bank/i.test(l.parentGroup))
     .reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0);
 
-  const bankBalance = categoryBank > 0 ? categoryBank : Math.abs(receiptTotalSum - paymentTotalSum);
-  const cashInHand = 0; // Phase 2 fix
+  let calcBankBalance = categoryBank;
+  if (calcBankBalance === 0) {
+    const bankEntries = allLedgerEntries.filter((e) => /bank/i.test(e.ledgerName));
+    calcBankBalance = bankEntries.reduce((s, e) => s + (e.isDebit ? num(e.amount) : -num(e.amount)), 0);
+    calcBankBalance = Math.abs(calcBankBalance);
+    if (calcBankBalance === 0) calcBankBalance = Math.abs(receiptTotalSum - paymentTotalSum);
+  }
+
+  // Cash in Hand
+  let calcCashInHand = ledgers
+    .filter((l) => /cash/i.test(l.name) || /cash/i.test(l.parentGroup))
+    .reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0);
+
+  if (calcCashInHand === 0) {
+    const cashEntries = allLedgerEntries.filter((e) => /cash/i.test(e.ledgerName));
+    calcCashInHand = Math.abs(cashEntries.reduce((s, e) => s + (e.isDebit ? num(e.amount) : -num(e.amount)), 0));
+  }
 
   // Receivables & Payables
   let outstandingReceivables = outstandings
     .filter((o) => o.type === 'receivable')
     .reduce((s, o) => s + num(o.pendingAmount), 0);
+
   if (outstandingReceivables === 0) {
     const categoryDebtor = ledgers
       .filter((l) => /debtor|receivable/i.test(l.name) || /debtor|receivable/i.test(l.parentGroup))
@@ -137,6 +156,7 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
   let outstandingPayables = outstandings
     .filter((o) => o.type === 'payable')
     .reduce((s, o) => s + num(o.pendingAmount), 0);
+
   if (outstandingPayables === 0) {
     const categoryCreditor = ledgers
       .filter((l) => /creditor|payable/i.test(l.name) || /creditor|payable/i.test(l.parentGroup))
@@ -151,13 +171,19 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
   const inventoryValue = stockItems.reduce((s, i) => s + num(i.closingValue), 0);
 
   // --- 6. GST Payable ---
-  const gstOutput = ledgers.filter((l) => /output/i.test(l.name)).reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0);
-  const gstInput = ledgers.filter((l) => /input/i.test(l.name)).reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0);
-  let gstPayable = gstOutput - gstInput;
-  if (gstPayable === 0) {
+  let calcGstPayable = 0;
+  const gstOutput = allLedgerEntries
+    .filter((e) => /output|cgst|sgst|igst/i.test(e.ledgerName) && !e.isDebit)
+    .reduce((s, e) => s + num(e.amount), 0);
+  const gstInput = allLedgerEntries
+    .filter((e) => /input|cgst|sgst|igst/i.test(e.ledgerName) && e.isDebit)
+    .reduce((s, e) => s + num(e.amount), 0);
+
+  calcGstPayable = Math.max(0, gstOutput - gstInput);
+  if (calcGstPayable === 0) {
     const dutiesLedger = ledgers.find((l) => /duties|tax|gst/i.test(l.name) || /duties|tax|gst/i.test(l.parentGroup));
     if (dutiesLedger) {
-      gstPayable = Math.abs(num(dutiesLedger.currentBalance));
+      calcGstPayable = Math.abs(num(dutiesLedger.currentBalance));
     }
   }
 
@@ -200,10 +226,10 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
     collectionsToday: pickVal('collectionsToday', collectionsToday),
     outstandingReceivables: pickVal('outstandingReceivables', outstandingReceivables),
     outstandingPayables: pickVal('outstandingPayables', outstandingPayables),
-    cashInHand: pickVal('cashInHand', cashInHand),
-    bankBalance: pickVal('bankBalance', bankBalance),
+    cashInHand: pickVal('cashInHand', calcCashInHand),
+    bankBalance: pickVal('bankBalance', calcBankBalance),
     inventoryValue: pickVal('inventoryValue', inventoryValue),
-    gstPayable: pickVal('gstPayable', gstPayable),
+    gstPayable: pickVal('gstPayable', calcGstPayable),
     mtdSales: pickVal('mtdSales', mtdSales),
     mtdPurchase: pickVal('mtdPurchase', mtdPurchase),
     ordersBilledToday: pickVal('ordersBilledToday', ordersBilledToday),

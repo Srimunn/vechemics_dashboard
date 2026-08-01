@@ -28,10 +28,10 @@ function exportDataReport(reportName, company, fromDate, toDate, extraStaticVars
       <REQUESTDESC>
         <REPORTNAME>${reportName}</REPORTNAME>
         <STATICVARIABLES>
+          <SVCURRENTCOMPANY>${company}</SVCURRENTCOMPANY>
           <SVFROMDATE>${fromDate}</SVFROMDATE>
           <SVTODATE>${toDate}</SVTODATE>
 ${extraStaticVars || ''}          <SVEXPORTFORMAT>${XML_FORMAT}</SVEXPORTFORMAT>
-          <SVCURRENTCOMPANY>${company}</SVCURRENTCOMPANY>
         </STATICVARIABLES>
       </REQUESTDESC>
     </EXPORTDATA>

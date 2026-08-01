@@ -40,7 +40,8 @@ const voucherLedgerEntrySchema = z.object({
 });
 
 const voucherSchema = z.object({
-  tallyGuid: z.string().min(1),
+  // Optional: synthesized from type+number+date when the agent doesn't send it.
+  tallyGuid: z.string().optional(),
   voucherType: z.enum(['Sales', 'Purchase', 'Receipt', 'Payment', 'Journal', 'Contra']),
   voucherNumber: z.string().default(''),
   date: z.string(),
@@ -134,36 +135,84 @@ async function ingestLedgers(companyId: string, data: unknown[]): Promise<number
   return ledgers.length;
 }
 
+/** Accept "YYYYMMDD" (Tally SV format) or any Date-parseable string. */
+function parseVoucherDate(s: string): Date | null {
+  const t = (s || '').trim();
+  const m = /^(\d{4})(\d{2})(\d{2})$/.exec(t);
+  if (m) return new Date(Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!));
+  const d = new Date(t);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Ingest vouchers resiliently: each voucher is validated and upserted on its
+ * own, so a single malformed record is skipped (and logged) rather than failing
+ * the whole batch. tallyGuid is synthesized when absent; the date accepts
+ * Tally's YYYYMMDD as well as ISO; amount is stored as a magnitude.
+ */
 async function ingestVouchers(companyId: string, data: unknown[]): Promise<number> {
-  const vouchers = z.array(voucherSchema).parse(data);
-  // Upsert one at a time so we can replace child rows atomically per voucher.
-  for (const v of vouchers) {
+  let ingested = 0;
+  let skipped = 0;
+
+  for (const raw of data) {
+    const parsedV = voucherSchema.safeParse(raw);
+    if (!parsedV.success) {
+      skipped++;
+      logger.warn({ issues: parsedV.error.issues.slice(0, 3) }, 'Skipping invalid voucher');
+      continue;
+    }
+    const v = parsedV.data;
+
+    const date = parseVoucherDate(v.date);
+    if (!date) {
+      skipped++;
+      logger.warn({ date: v.date, voucherNumber: v.voucherNumber }, 'Skipping voucher: unparseable date');
+      continue;
+    }
+
+    const tallyGuid =
+      v.tallyGuid && v.tallyGuid.length > 0
+        ? v.tallyGuid
+        : `${v.voucherType}:${v.voucherNumber}:${v.date}`;
+
     const base = {
       voucherType: v.voucherType,
       voucherNumber: v.voucherNumber,
-      date: new Date(v.date),
+      date,
       partyName: v.partyName ?? null,
       narration: v.narration ?? null,
-      amount: v.amount,
+      amount: Math.abs(v.amount),
       isCancelled: v.isCancelled,
     };
-    await prisma.voucher.upsert({
-      where: { tallyGuid: v.tallyGuid },
-      update: {
-        ...base,
-        items: { deleteMany: {}, create: v.items },
-        ledgerEntries: { deleteMany: {}, create: v.ledgerEntries },
-      },
-      create: {
-        companyId,
-        tallyGuid: v.tallyGuid,
-        ...base,
-        items: { create: v.items },
-        ledgerEntries: { create: v.ledgerEntries },
-      },
-    });
+
+    try {
+      await prisma.voucher.upsert({
+        where: { tallyGuid },
+        update: {
+          ...base,
+          items: { deleteMany: {}, create: v.items },
+          ledgerEntries: { deleteMany: {}, create: v.ledgerEntries },
+        },
+        create: {
+          companyId,
+          tallyGuid,
+          ...base,
+          items: { create: v.items },
+          ledgerEntries: { create: v.ledgerEntries },
+        },
+      });
+      ingested++;
+    } catch (err) {
+      skipped++;
+      logger.warn(
+        { err: err instanceof Error ? err.message : String(err), tallyGuid },
+        'Voucher upsert failed',
+      );
+    }
   }
-  return vouchers.length;
+
+  if (skipped > 0) logger.warn({ ingested, skipped }, 'Voucher ingest finished with skips');
+  return ingested;
 }
 
 async function ingestStock(companyId: string, data: unknown[]): Promise<number> {
@@ -265,8 +314,9 @@ syncRouter.post('/ingest', syncAuth, async (req: Request, res: Response) => {
     logger.info({ syncId, jobType, ingested }, 'Ingested');
     res.json({ ok: true, jobType, ingested });
   } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
     logger.error({ err, syncId, jobType }, 'Ingest failed');
-    res.status(500).json({ error: 'Ingest failed' });
+    res.status(500).json({ error: 'Ingest failed', jobType, detail });
   }
 });
 

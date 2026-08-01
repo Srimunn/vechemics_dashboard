@@ -65,14 +65,42 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
     }),
   ]);
 
-  // --- Sales / Purchase / Collections ---
+  // --- Ledger sources ----------------------------------------------------
+  // Ledger rows arrive from statement exports, distinguished by parentGroup:
+  //   'Trial Balance' -> one row per account group; `name` IS the group name
+  //   'Profit & Loss' -> one row per P&L line (signed as Tally exports them)
+  //   'Balance Sheet' -> top-level group totals
+  //   anything else   -> real individual ledgers (from a List of Ledgers sync)
+  const STATEMENT_GROUPS = new Set(['Trial Balance', 'Balance Sheet', 'Profit & Loss']);
+  const plLedgers = ledgers.filter((l) => l.parentGroup === 'Profit & Loss');
+
+  // Sum a balance category, preferring real per-ledger rows (matched on their
+  // parentGroup), else Trial Balance group rows (matched on their name).
+  const categoryTotal = (re: RegExp): number => {
+    const real = ledgers.filter((l) => !STATEMENT_GROUPS.has(l.parentGroup) && re.test(l.parentGroup));
+    if (real.length > 0) return real.reduce((s, l) => s + num(l.currentBalance), 0);
+    const tb = ledgers.filter((l) => l.parentGroup === 'Trial Balance' && re.test(l.name));
+    return tb.reduce((s, l) => s + num(l.currentBalance), 0);
+  };
+
+  // Signed value of a P&L line by name.
+  const plValue = (re: RegExp): number => {
+    const row = plLedgers.find((l) => re.test(l.name));
+    return row ? num(row.currentBalance) : 0;
+  };
+
+  // --- Sales / Purchase / Collections (voucher-derived; daily) -----------
   const todaySales = salesToday.reduce((s, v) => s + num(v.amount), 0);
   const todayPurchase = purchaseToday.reduce((s, v) => s + num(v.amount), 0);
   const collectionsToday = receiptsToday.reduce((s, v) => s + num(v.amount), 0);
-  const mtdSales = salesMtd.reduce((s, v) => s + num(v.amount), 0);
-  const mtdPurchase = purchaseMtd.reduce((s, v) => s + num(v.amount), 0);
+  let mtdSales = salesMtd.reduce((s, v) => s + num(v.amount), 0);
+  let mtdPurchase = purchaseMtd.reduce((s, v) => s + num(v.amount), 0);
 
-  // --- Gross profit: sales - COGS (qty * weighted-avg cost) ---
+  // --- Gross / Net profit ------------------------------------------------
+  // Default: voucher-derived (sales - COGS). When P&L data is present, use it
+  // as the authoritative source (per spec): Gross = Sales + Direct Income +
+  // Cost of Sales (signs preserved, cost is negative); Net = Gross + Indirect
+  // Expenses (indirect is negative). MTD sales/purchase also come from P&L.
   const avgCostByItem = new Map(stockItems.map((s) => [s.name, num(s.avgCost)]));
   let cogs = 0;
   for (const v of salesToday) {
@@ -80,68 +108,80 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
       cogs += num(it.quantity) * (avgCostByItem.get(it.stockItemName) ?? 0);
     }
   }
-  const todayGrossProfit = todaySales - cogs;
+  let todayGrossProfit = todaySales - cogs;
+  let todayNetProfit = todayGrossProfit;
 
-  // --- Net profit: gross - pro-rated indirect expenses (MTD/day) ---
-  const indirectNames = new Set(
-    ledgers.filter((l) => /indirect exp/i.test(l.parentGroup)).map((l) => l.name),
-  );
-  let mtdIndirect = 0;
-  if (indirectNames.size > 0) {
-    const entries = await prisma.voucherLedgerEntry.findMany({
-      where: {
-        ledgerName: { in: [...indirectNames] },
-        isDebit: true,
-        voucher: { companyId, isCancelled: false, date: { gte: monthStart, lt: dayEnd } },
-      },
-    });
-    mtdIndirect = entries.reduce((s, e) => s + num(e.amount), 0);
-  }
-  const proratedIndirect = mtdIndirect / daysInMonth(date);
-  const todayNetProfit = todayGrossProfit - proratedIndirect;
-
-  // --- Balances from ledgers ---
-  const cashInHand = ledgers
-    .filter((l) => /cash-?in-?hand/i.test(l.parentGroup) || /^cash$/i.test(l.parentGroup))
-    .reduce((s, l) => s + num(l.currentBalance), 0);
-  const bankBalance = ledgers
-    .filter((l) => /bank/i.test(l.parentGroup))
-    .reduce((s, l) => s + num(l.currentBalance), 0);
-
-  // --- GST payable: output GST - input GST ---
-  // Primary source is Duties & Taxes ledger balances (from ledger-list). The
-  // /gst/i test matches the real Tally names "OUTPUT CGST @ 9%" / "OUTPUT SGST
-  // @9%" / IGST via the GST substring inside C/S/IGST.
-  const gstLedgers = ledgers.filter(
-    (l) => /duties.*tax/i.test(l.parentGroup) || /gst/i.test(l.name),
-  );
-  let gstPayable =
-    gstLedgers.filter((l) => /output/i.test(l.name)).reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0) -
-    gstLedgers.filter((l) => /input/i.test(l.name)).reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0);
-
-  // Fallback: when no GST ledger balances are present, derive from this month's
-  // voucher GST entries (OUTPUT vs INPUT), which the confirmed Tally voucher
-  // format exposes as ledger entries like "OUTPUT CGST @ 9%".
-  if (gstLedgers.length === 0) {
-    const gstEntries = await prisma.voucherLedgerEntry.findMany({
-      where: {
-        ledgerName: { contains: 'GST', mode: 'insensitive' },
-        voucher: { companyId, isCancelled: false, date: { gte: monthStart, lt: dayEnd } },
-      },
-      select: { ledgerName: true, amount: true },
-    });
-    const output = gstEntries.filter((e) => /output/i.test(e.ledgerName)).reduce((s, e) => s + num(e.amount), 0);
-    const input = gstEntries.filter((e) => /input/i.test(e.ledgerName)).reduce((s, e) => s + num(e.amount), 0);
-    gstPayable = output - input;
+  if (plLedgers.length > 0) {
+    const plSales = plValue(/^sales account/i);
+    const plDirectIncome = plValue(/income \(direct\)|direct income/i);
+    const plCostOfSales = plValue(/cost of sales/i);
+    const plPurchase = plValue(/purchase account/i);
+    const plIndirect = plValue(/indirect exp|expenses \(indirect\)/i);
+    todayGrossProfit = plSales + plDirectIncome + plCostOfSales;
+    todayNetProfit = todayGrossProfit + plIndirect;
+    mtdSales = Math.abs(plSales);
+    mtdPurchase = Math.abs(plPurchase);
+  } else {
+    // No P&L: pro-rate indirect expenses from this month's voucher entries.
+    const indirectNames = new Set(
+      ledgers.filter((l) => /indirect exp/i.test(l.parentGroup)).map((l) => l.name),
+    );
+    let mtdIndirect = 0;
+    if (indirectNames.size > 0) {
+      const entries = await prisma.voucherLedgerEntry.findMany({
+        where: {
+          ledgerName: { in: [...indirectNames] },
+          isDebit: true,
+          voucher: { companyId, isCancelled: false, date: { gte: monthStart, lt: dayEnd } },
+        },
+      });
+      mtdIndirect = entries.reduce((s, e) => s + num(e.amount), 0);
+    }
+    todayNetProfit = todayGrossProfit - mtdIndirect / daysInMonth(date);
   }
 
-  // --- Outstandings & inventory ---
-  const outstandingReceivables = outstandings
+  // --- Balances (Trial Balance groups, or real ledgers). Shown as magnitudes.
+  const cashInHand = Math.abs(categoryTotal(/cash.?in.?hand|^cash accounts?$/i));
+  const bankBalance = Math.abs(categoryTotal(/bank/i));
+
+  // --- GST payable: output - input ledgers, else the Duties & Taxes net -----
+  const gstNamed = ledgers.filter((l) => /output|input/i.test(l.name) && /gst/i.test(l.name));
+  let gstPayable;
+  if (gstNamed.length > 0) {
+    gstPayable =
+      gstNamed.filter((l) => /output/i.test(l.name)).reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0) -
+      gstNamed.filter((l) => /input/i.test(l.name)).reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0);
+  } else {
+    const dutiesGroup = categoryTotal(/duties.*tax|^gst$/i);
+    if (dutiesGroup !== 0) {
+      gstPayable = Math.abs(dutiesGroup);
+    } else {
+      const gstEntries = await prisma.voucherLedgerEntry.findMany({
+        where: {
+          ledgerName: { contains: 'GST', mode: 'insensitive' },
+          voucher: { companyId, isCancelled: false, date: { gte: monthStart, lt: dayEnd } },
+        },
+        select: { ledgerName: true, amount: true },
+      });
+      const output = gstEntries.filter((e) => /output/i.test(e.ledgerName)).reduce((s, e) => s + num(e.amount), 0);
+      const input = gstEntries.filter((e) => /input/i.test(e.ledgerName)).reduce((s, e) => s + num(e.amount), 0);
+      gstPayable = output - input;
+    }
+  }
+
+  // --- Outstandings (bills reports, else Trial Balance groups) & inventory --
+  let outstandingReceivables = outstandings
     .filter((o) => o.type === 'receivable')
     .reduce((s, o) => s + num(o.pendingAmount), 0);
-  const outstandingPayables = outstandings
+  if (outstandingReceivables === 0) {
+    outstandingReceivables = Math.abs(categoryTotal(/sundry debtor|account.?receivable|receivable/i));
+  }
+  let outstandingPayables = outstandings
     .filter((o) => o.type === 'payable')
     .reduce((s, o) => s + num(o.pendingAmount), 0);
+  if (outstandingPayables === 0) {
+    outstandingPayables = Math.abs(categoryTotal(/sundry creditor|account.?payable|payable/i));
+  }
   const inventoryValue = stockItems.reduce((s, i) => s + num(i.closingValue), 0);
 
   // --- Counts ---

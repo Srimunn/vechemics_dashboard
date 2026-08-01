@@ -3,13 +3,6 @@
 const t = require('./xml-templates');
 const p = require('./parsers');
 
-/**
- * The full set of reports this agent syncs. `jobType` is the backend ingest
- * discriminator; `parse` turns the parsed XML into normalized records.
- *
- * Note: Trial Balance provides per-ledger closing balances, so it is pushed as
- * `ledger-list` (upserted by name — non-destructive).
- */
 function buildJobs(config) {
   const co = config.COMPANY_NAME;
   const from = config.FY_START;
@@ -24,6 +17,8 @@ function buildJobs(config) {
     { name: 'voucher-register-purchase', jobType: 'voucher-register-purchase', xml: t.voucherRegister(co, 'Purchase', from, to), parse: (x) => p.parseVouchers(x, 'Purchase') },
     { name: 'voucher-register-receipt', jobType: 'voucher-register-receipt', xml: t.voucherRegister(co, 'Receipt', from, to), parse: (x) => p.parseVouchers(x, 'Receipt') },
     { name: 'voucher-register-payment', jobType: 'voucher-register-payment', xml: t.voucherRegister(co, 'Payment', from, to), parse: (x) => p.parseVouchers(x, 'Payment') },
+    { name: 'bills-receivable', jobType: 'bills-receivable', xml: t.billsReceivable(co, from, to), parse: (x) => p.parseOutstandings(x, 'receivable') },
+    { name: 'bills-payable', jobType: 'bills-payable', xml: t.billsPayable(co, from, to), parse: (x) => p.parseOutstandings(x, 'payable') },
   ];
 }
 

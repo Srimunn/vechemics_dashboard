@@ -10,6 +10,7 @@ import { syncStockSummary } from './stock-summary.js';
 import { syncBillsReceivable, syncBillsPayable } from './outstandings.js';
 import { syncBalanceSheet } from './balance-sheet.js';
 import { syncProfitAndLoss } from './profit-and-loss.js';
+import { syncKpiDirect } from './kpi-direct.js';
 
 /** YYYYMMDD for a given date. */
 function ymd(d: Date): string {
@@ -34,6 +35,7 @@ const JOBS: Job[] = [
   { name: 'voucher-register-contra', run: (c) => syncVoucherRegister(c, 'Contra') },
   { name: 'bills-receivable', run: syncBillsReceivable },
   { name: 'bills-payable', run: syncBillsPayable },
+  { name: 'kpi-direct', run: syncKpiDirect },
 ];
 
 /**

@@ -102,8 +102,9 @@ const ingestSchema = z.object({
     'stock-summary',
     'bills-receivable',
     'bills-payable',
+    'kpi-direct',
   ]),
-  data: z.array(z.unknown()),
+  data: z.union([z.array(z.unknown()), z.record(z.unknown())]),
 });
 
 // ---------------------------------------------------------------------------
@@ -338,6 +339,59 @@ async function ingestOutstandings(
   return rows.length;
 }
 
+const kpiDirectSchema = z.object({
+  snapshotDate: z.string().optional(),
+  todaySales: optionalCoercedNumber.transform((v) => v ?? 0),
+  todayPurchase: optionalCoercedNumber.transform((v) => v ?? 0),
+  todayGrossProfit: optionalCoercedNumber.transform((v) => v ?? 0),
+  todayNetProfit: optionalCoercedNumber.transform((v) => v ?? 0),
+  collectionsToday: optionalCoercedNumber.transform((v) => v ?? 0),
+  outstandingReceivables: optionalCoercedNumber.transform((v) => v ?? 0),
+  outstandingPayables: optionalCoercedNumber.transform((v) => v ?? 0),
+  cashInHand: optionalCoercedNumber.transform((v) => v ?? 0),
+  bankBalance: optionalCoercedNumber.transform((v) => v ?? 0),
+  inventoryValue: optionalCoercedNumber.transform((v) => v ?? 0),
+  gstPayable: optionalCoercedNumber.transform((v) => v ?? 0),
+  mtdSales: optionalCoercedNumber.transform((v) => v ?? 0),
+  mtdPurchase: optionalCoercedNumber.transform((v) => v ?? 0),
+  ordersBilledToday: optionalCoercedNumber.transform((v) => v ?? 0),
+  newCustomersToday: optionalCoercedNumber.transform((v) => v ?? 0),
+});
+
+async function ingestKpiDirect(companyId: string, data: unknown): Promise<number> {
+  const rawObj = Array.isArray(data) ? data[0] : data;
+  const parsed = kpiDirectSchema.parse(rawObj ?? {});
+
+  const targetDate = parsed.snapshotDate ? new Date(parsed.snapshotDate) : new Date();
+  const dayStart = new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth(), targetDate.getUTCDate()));
+
+  const values = {
+    todaySales: parsed.todaySales,
+    todayPurchase: parsed.todayPurchase,
+    todayGrossProfit: parsed.todayGrossProfit,
+    todayNetProfit: parsed.todayNetProfit,
+    collectionsToday: parsed.collectionsToday,
+    outstandingReceivables: parsed.outstandingReceivables,
+    outstandingPayables: parsed.outstandingPayables,
+    cashInHand: parsed.cashInHand,
+    bankBalance: parsed.bankBalance,
+    inventoryValue: parsed.inventoryValue,
+    gstPayable: parsed.gstPayable,
+    mtdSales: parsed.mtdSales,
+    mtdPurchase: parsed.mtdPurchase,
+    ordersBilledToday: parsed.ordersBilledToday,
+    newCustomersToday: parsed.newCustomersToday,
+  };
+
+  await prisma.kpiSnapshot.upsert({
+    where: { companyId_snapshotDate: { companyId, snapshotDate: dayStart } },
+    update: values,
+    create: { companyId, snapshotDate: dayStart, ...values },
+  });
+
+  return 1;
+}
+
 // ---------------------------------------------------------------------------
 // POST /api/sync/ingest
 // ---------------------------------------------------------------------------
@@ -354,21 +408,26 @@ syncRouter.post('/ingest', syncAuth, async (req: Request, res: Response) => {
 
   try {
     let ingested = 0;
+    const items = Array.isArray(data) ? data : [data];
 
-    if (jobType === 'ledger-list' || jobType === 'balance-sheet' || jobType === 'profit-and-loss') {
-      ingested = await ingestLedgers(companyId, data, jobType);
+    if (jobType === 'kpi-direct') {
+      ingested = await ingestKpiDirect(companyId, data);
+    } else if (jobType === 'ledger-list' || jobType === 'balance-sheet' || jobType === 'profit-and-loss') {
+      ingested = await ingestLedgers(companyId, items, jobType);
     } else if ((VOUCHER_JOB_TYPES as readonly string[]).includes(jobType)) {
-      ingested = await ingestVouchers(companyId, data);
+      ingested = await ingestVouchers(companyId, items);
     } else if (jobType === 'stock-summary') {
-      ingested = await ingestStock(companyId, data);
+      ingested = await ingestStock(companyId, items);
     } else if (jobType === 'bills-receivable') {
-      ingested = await ingestOutstandings(companyId, data, 'receivable');
+      ingested = await ingestOutstandings(companyId, items, 'receivable');
     } else if (jobType === 'bills-payable') {
-      ingested = await ingestOutstandings(companyId, data, 'payable');
+      ingested = await ingestOutstandings(companyId, items, 'payable');
     }
 
-    // Refresh today's KPI snapshot so the dashboard reflects the new data.
-    await recomputeTodaySnapshot(companyId);
+    if (jobType !== 'kpi-direct') {
+      // Refresh today's KPI snapshot so the dashboard reflects the new data.
+      await recomputeTodaySnapshot(companyId);
+    }
 
     logger.info({ syncId, jobType, ingested }, 'Ingested');
     res.json({ ok: true, jobType, ingested });

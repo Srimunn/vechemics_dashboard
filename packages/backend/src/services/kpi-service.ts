@@ -180,22 +180,34 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
     newCustomersToday = todaysParties.filter((p) => !priorSet.has(p)).length;
   }
 
+  const existingSnapshot = await prisma.kpiSnapshot.findUnique({
+    where: { companyId_snapshotDate: { companyId, snapshotDate: dayStart } },
+  });
+
+  const pickVal = (field: string, fallbackVal: number): number => {
+    if (existingSnapshot && (existingSnapshot as Record<string, unknown>)[field] !== undefined) {
+      const v = num((existingSnapshot as Record<string, unknown>)[field]);
+      if (v !== 0) return v;
+    }
+    return fallbackVal;
+  };
+
   const values = {
-    todaySales,
-    todayPurchase,
-    todayGrossProfit,
-    todayNetProfit,
-    collectionsToday,
-    outstandingReceivables,
-    outstandingPayables,
-    cashInHand,
-    bankBalance,
-    inventoryValue,
-    gstPayable,
-    mtdSales,
-    mtdPurchase,
-    ordersBilledToday,
-    newCustomersToday,
+    todaySales: pickVal('todaySales', todaySales),
+    todayPurchase: pickVal('todayPurchase', todayPurchase),
+    todayGrossProfit: pickVal('todayGrossProfit', todayGrossProfit),
+    todayNetProfit: pickVal('todayNetProfit', todayNetProfit),
+    collectionsToday: pickVal('collectionsToday', collectionsToday),
+    outstandingReceivables: pickVal('outstandingReceivables', outstandingReceivables),
+    outstandingPayables: pickVal('outstandingPayables', outstandingPayables),
+    cashInHand: pickVal('cashInHand', cashInHand),
+    bankBalance: pickVal('bankBalance', bankBalance),
+    inventoryValue: pickVal('inventoryValue', inventoryValue),
+    gstPayable: pickVal('gstPayable', gstPayable),
+    mtdSales: pickVal('mtdSales', mtdSales),
+    mtdPurchase: pickVal('mtdPurchase', mtdPurchase),
+    ordersBilledToday: pickVal('ordersBilledToday', ordersBilledToday),
+    newCustomersToday: pickVal('newCustomersToday', newCustomersToday),
   };
 
   await prisma.kpiSnapshot.upsert({
@@ -204,7 +216,7 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
     create: { companyId, snapshotDate: dayStart, ...values },
   });
 
-  logger.debug({ companyId, date: dayStart.toISOString(), todaySales }, 'KPI snapshot recomputed');
+  logger.debug({ companyId, date: dayStart.toISOString(), todaySales: values.todaySales }, 'KPI snapshot recomputed');
 }
 
 /** Recompute today's snapshot. Convenience wrapper called after ingests. */

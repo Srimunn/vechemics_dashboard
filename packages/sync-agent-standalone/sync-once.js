@@ -14,6 +14,7 @@ const { config, validate } = require('./lib/config');
 const { callTally } = require('./lib/tally-client');
 const { buildJobs } = require('./lib/reports');
 const { push, postSyncLog } = require('./lib/uploader');
+const { extractKpiDirect } = require('./lib/parsers');
 
 validate({ requireBackend: true });
 
@@ -31,11 +32,13 @@ async function main() {
   const jobs = buildJobs(config);
   let totalRecords = 0;
   let failures = 0;
+  const collected = {};
 
   for (const job of jobs) {
     try {
       const { parsed } = await callTally(job.xml, job.name);
       const data = job.parse(parsed);
+      collected[job.name] = data;
       const sent = await push(syncId, job.jobType, data);
       totalRecords += sent;
       console.log(`[${job.name}] -> ${job.jobType}: pushed ${sent} record(s)`);
@@ -43,6 +46,24 @@ async function main() {
       failures++;
       console.error(`[${job.name}] FAILED: ${err.message}`);
     }
+  }
+
+  // Extract and push kpi-direct snapshot
+  try {
+    const snapshot = extractKpiDirect({
+      balanceSheetRows: collected['balance-sheet'] || [],
+      pnlRows: collected['profit-and-loss'] || [],
+      stockItems: collected['stock-summary'] || [],
+      receivables: collected['bills-receivable'] || [],
+      payables: collected['bills-payable'] || [],
+      ledgers: collected['trial-balance'] || [],
+      vouchersToday: collected['day-book'] || [],
+    });
+    const sent = await push(syncId, 'kpi-direct', [snapshot]);
+    totalRecords += sent;
+    console.log(`[kpi-direct] -> kpi-direct: pushed ${sent} snapshot record`);
+  } catch (err) {
+    console.error(`[kpi-direct] FAILED: ${err.message}`);
   }
 
   const finishedAt = new Date();

@@ -66,6 +66,14 @@ function trialBalance(company, fromDate, toDate) {
   return exportDataReport('Trial Balance', company, fromDate, toDate);
 }
 
+function billsReceivable(company, fromDate, toDate) {
+  return exportDataReport('Bills Receivable', company, fromDate, toDate);
+}
+
+function billsPayable(company, fromDate, toDate) {
+  return exportDataReport('Bills Payable', company, fromDate, toDate);
+}
+
 module.exports = {
-  testConnection, dayBook, voucherRegister, stockSummary, balanceSheet, profitAndLoss, trialBalance,
+  testConnection, dayBook, voucherRegister, stockSummary, balanceSheet, profitAndLoss, trialBalance, billsReceivable, billsPayable,
 };

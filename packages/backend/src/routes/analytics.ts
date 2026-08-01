@@ -12,6 +12,18 @@ function num(x: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function parseTallyDateStr(s?: string): Date | null {
+  if (!s) return null;
+  if (/^\d{8}$/.test(s)) {
+    const y = parseInt(s.slice(0, 4), 10);
+    const m = parseInt(s.slice(4, 6), 10) - 1;
+    const d = parseInt(s.slice(6, 8), 10);
+    return new Date(Date.UTC(y, m, d));
+  }
+  const parsed = new Date(s);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 // --- 1. Sales Analytics (`GET /api/analytics/sales`) ---
 analyticsRouter.get('/sales', requireUser, async (req: Request, res: Response) => {
   try {
@@ -328,9 +340,22 @@ analyticsRouter.get('/product-profitability', requireUser, async (req: Request, 
       stockCostMap.set(s.name.toLowerCase().trim(), num(s.avgCost));
     });
 
+    const fromStr = (req.query.from as string) || '20260401';
+    const toStr = (req.query.to as string) || new Date().toISOString().slice(0, 10).replace(/-/g, '');
+
+    const fromDate = parseTallyDateStr(fromStr) || new Date('2026-04-01T00:00:00.000Z');
+    const toDate = parseTallyDateStr(toStr) || new Date();
+    const toInclusive = new Date(toDate);
+    toInclusive.setUTCDate(toInclusive.getUTCDate() + 1);
+
     const items = await prisma.voucherItem.findMany({
       where: {
-        voucher: { companyId, voucherType: 'Sales', isCancelled: false },
+        voucher: {
+          companyId,
+          voucherType: 'Sales',
+          isCancelled: false,
+          date: { gte: fromDate, lt: toInclusive },
+        },
       },
     });
 

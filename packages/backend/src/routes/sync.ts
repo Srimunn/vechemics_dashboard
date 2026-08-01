@@ -6,6 +6,7 @@ import { logger } from '../lib/logger.js';
 import { syncAuth } from '../middleware/sync-auth.js';
 import { requireUser } from '../middleware/auth.js';
 import { recomputeTodaySnapshot } from '../services/kpi-service.js';
+import { generateNotifications } from '../services/notification-service.js';
 
 export const syncRouter = Router();
 
@@ -608,7 +609,8 @@ syncRouter.post('/refresh-kpi', requireUser, async (_req: Request, res: Response
     });
 
     await recomputeTodaySnapshot(companyId);
-    res.json({ ok: true, message: 'KPI snapshot refreshed' });
+    await generateNotifications(companyId);
+    res.json({ ok: true, message: 'KPI snapshot refreshed and notifications generated' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to refresh KPI', detail: String(err) });
   }

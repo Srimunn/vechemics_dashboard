@@ -24,11 +24,12 @@ model Company {
   fyEnd       DateTime
   createdAt   DateTime @default(now())
 
-  vouchers     Voucher[]
-  ledgers      Ledger[]
-  stockItems   StockItem[]
-  outstandings Outstanding[]
-  kpiSnapshots KpiSnapshot[]
+  vouchers      Voucher[]
+  ledgers       Ledger[]
+  stockItems    StockItem[]
+  outstandings  Outstanding[]
+  kpiSnapshots  KpiSnapshot[]
+  notifications Notification[]
 }
 
 model Voucher {
@@ -180,4 +181,21 @@ model SyncTrigger {
   syncType    String    @default("manual")
 
   @@index([consumedAt])
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  type        String   // "overdue_receivable", "payment_due", "gst_reminder", "low_stock", "negative_margin", "daily_summary"
+  title       String
+  message     String
+  severity    String   // "info", "warning", "critical"
+  isRead      Boolean  @default(false)
+  relatedId   String?
+  relatedUrl  String?
+  createdAt   DateTime @default(now())
+
+  @@index([companyId, isRead])
+  @@index([createdAt])
 }

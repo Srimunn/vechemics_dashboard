@@ -141,9 +141,102 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
         i.partyName || 'Cash Purchase',
         num(i.amount),
       ]);
+    } else if (moduleName === 'product-profitability') {
+      headers = ['Stock Item Name', 'Unit', 'Total Qty Sold', 'Avg Sale Rate', 'Avg Cost Rate', 'Total Sale Value', 'Total Cost Value', 'Total Profit', 'Margin %', 'Estimated Cost'];
+      const stockItems = await prisma.stockItem.findMany({ where: { companyId } });
+      const stockCostMap = new Map<string, number>();
+      stockItems.forEach((s) => stockCostMap.set(s.name.toLowerCase().trim(), num(s.avgCost)));
+
+      const items = await prisma.voucherItem.findMany({
+        where: { voucher: { companyId, voucherType: 'Sales', isCancelled: false } },
+      });
+
+      const productMap: Record<string, any> = {};
+      items.forEach((item) => {
+        const name = item.stockItemName.trim();
+        if (!name) return;
+        const qty = num(item.quantity);
+        const saleAmt = num(item.amount);
+        const saleRate = num(item.rate) || (qty > 0 ? saleAmt / qty : 0);
+        const dbCost = stockCostMap.get(name.toLowerCase());
+        const isEstimated = !dbCost || dbCost === 0;
+        const costRate = num(item.costRate) || (isEstimated ? saleRate * 0.8 : dbCost);
+        const costAmt = num(item.costAmount) || costRate * qty;
+
+        if (!productMap[name]) {
+          productMap[name] = { name, unit: item.unit || 'NOS', qty: 0, saleAmt: 0, costAmt: 0, isEstimated };
+        }
+        productMap[name].qty += qty;
+        productMap[name].saleAmt += saleAmt;
+        productMap[name].costAmt += costAmt;
+        if (!isEstimated) productMap[name].isEstimated = false;
+      });
+
+      rows = Object.values(productMap).map((p) => {
+        const avgSaleRate = p.qty > 0 ? p.saleAmt / p.qty : 0;
+        const avgCostRate = p.qty > 0 ? p.costAmt / p.qty : 0;
+        const profit = p.saleAmt - p.costAmt;
+        const margin = p.saleAmt > 0 ? (profit / p.saleAmt) * 100 : 0;
+        return [
+          p.name, p.unit, p.qty, Math.round(avgSaleRate * 100) / 100, Math.round(avgCostRate * 100) / 100,
+          Math.round(p.saleAmt * 100) / 100, Math.round(p.costAmt * 100) / 100,
+          Math.round(profit * 100) / 100, Math.round(margin * 10) / 10, p.isEstimated ? 'YES' : 'NO',
+        ];
+      });
+    } else if (moduleName === 'gst') {
+      headers = ['Ledger Name', 'Voucher Number', 'Voucher Date', 'Type', 'Amount'];
+      const entries = await prisma.voucherLedgerEntry.findMany({
+        where: {
+          voucher: { companyId, isCancelled: false },
+          ledgerName: { contains: 'GST', mode: 'insensitive' },
+        },
+        include: { voucher: true },
+        orderBy: { voucher: { date: 'desc' } },
+      });
+      rows = entries.map((e) => [
+        e.ledgerName,
+        e.voucher.voucherNumber,
+        e.voucher.date.toISOString().split('T')[0]!,
+        e.isDebit ? 'INPUT (Debit)' : 'OUTPUT (Credit)',
+        num(e.amount),
+      ]);
+    } else if (moduleName === 'daily-report') {
+      headers = ['Date', 'Voucher Type', 'Voucher Number', 'Party Name', 'Amount'];
+      const today = new Date();
+      const dayStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+      const dayEnd = new Date(dayStart);
+      dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+      const vouchers = await prisma.voucher.findMany({
+        where: { companyId, isCancelled: false, date: { gte: dayStart, lt: dayEnd } },
+        orderBy: { voucherNumber: 'asc' },
+      });
+      rows = vouchers.map((v) => [
+        v.date.toISOString().split('T')[0]!,
+        v.voucherType,
+        v.voucherNumber,
+        v.partyName || 'Counter Party',
+        num(v.amount),
+      ]);
+    } else if (moduleName === 'financial-overview' || moduleName === 'pnl' || moduleName === 'balance-sheet') {
+      headers = ['Metric Name', 'Category', 'Amount (INR)'];
+      const snapshot = await prisma.kpiSnapshot.findFirst({ where: { companyId }, orderBy: { snapshotDate: 'desc' } });
+      rows = [
+        ['Sales Revenue (MTD)', 'Profit & Loss', num(snapshot?.mtdSales)],
+        ['Purchase Accounts (MTD)', 'Profit & Loss', num(snapshot?.mtdPurchase)],
+        ['Today Gross Profit', 'Profit & Loss', num(snapshot?.todayGrossProfit)],
+        ['Today Net Profit', 'Profit & Loss', num(snapshot?.todayNetProfit)],
+        ['Bank Accounts Balance', 'Balance Sheet', num(snapshot?.bankBalance)],
+        ['Cash in Hand', 'Balance Sheet', num(snapshot?.cashInHand)],
+        ['Sundry Debtors (Receivables)', 'Balance Sheet', num(snapshot?.outstandingReceivables)],
+        ['Sundry Creditors (Payables)', 'Balance Sheet', num(snapshot?.outstandingPayables)],
+        ['Closing Inventory Value', 'Balance Sheet', num(snapshot?.inventoryValue)],
+        ['Net GST Payable', 'Balance Sheet', num(snapshot?.gstPayable)],
+      ];
     } else {
-      headers = ['Message'];
-      rows = [['Export data ready']];
+      headers = ['Ledger / Master Name', 'Type', 'Amount'];
+      const ledgers = await prisma.ledger.findMany({ where: { companyId }, take: 50 });
+      rows = ledgers.map((l) => [l.name, l.parentGroup || 'Ledger', Math.abs(num(l.currentBalance))]);
     }
 
     const csvContent = arrayToCsv(headers, rows);

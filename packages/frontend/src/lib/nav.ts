@@ -2,7 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard, FileText, TrendingUp, Wallet, LineChart, ShoppingCart,
   Package, ArrowDownToLine, ArrowUpFromLine, Truck, Users, ReceiptText,
-  ShieldCheck, Files, Brain, Settings,
+  ShieldCheck, Files, Brain, Settings, Bell,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -27,6 +27,10 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         title: 'Daily Business Report', href: '/dashboard/daily-report', icon: FileText,
         phase: 'Phase 2', description: 'A single end-of-day snapshot of sales, collections, and cash movements to review each evening.',
+      },
+      {
+        title: 'Notifications', href: '/dashboard/notifications', icon: Bell,
+        phase: 'Phase 3.5', description: 'System alerts, overdue receivables, low stock, and negative margin notifications.',
       },
     ],
   },

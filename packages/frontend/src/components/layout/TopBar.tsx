@@ -378,37 +378,6 @@ export function TopBar({ userName = 'Velmurugan', userRole = 'CEO / MD' }: { use
             </div>
           </div>
         </div>
-
-        {/* 4A: Top Bar Quick Stats Strip */}
-        <div className="bg-[#1E3A5F] text-white px-6 py-1.5 text-xs flex flex-wrap items-center justify-between border-t border-blue-900">
-          <div className="flex flex-wrap items-center gap-6 font-medium">
-            <div className="flex items-center gap-1.5">
-              <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
-              <span className="text-white/70">Sales Today:</span>
-              <span className="font-bold text-white">{formatINR(salesTodayVal)}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="h-3.5 w-3.5 text-blue-400" />
-              <span className="text-white/70">Collections:</span>
-              <span className="font-bold text-white">{formatINR(collectionsTodayVal)}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <ArrowDownToLine className="h-3.5 w-3.5 text-rose-400" />
-              <span className="text-white/70">Pending Receivables:</span>
-              <span className="font-bold text-white">{formatINR(receivablesVal)}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Wallet className="h-3.5 w-3.5 text-amber-400" />
-              <span className="text-white/70">Bank Balance:</span>
-              <span className="font-bold text-white">{formatINR(bankBalVal)}</span>
-            </div>
-          </div>
-
-          <div className="hidden md:flex items-center gap-1 text-[11px] text-white/60">
-            <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
-            <span>Tally Live Sync Active</span>
-          </div>
-        </div>
       </header>
 
       {/* Mobile drawer */}

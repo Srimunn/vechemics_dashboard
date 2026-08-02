@@ -63,7 +63,7 @@ async function buildExcelWorkbook(
   const worksheet = workbook.addWorksheet(sheetName || 'Report');
 
   // Header Row 1: Company Name
-  const companyRow = worksheet.addRow([companyName]);
+  const companyRow = worksheet.addRow(['VCHEMICS INDIA SOLUTIONS']);
   companyRow.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FF1E3A5F' } };
   worksheet.mergeCells(1, 1, 1, Math.max(headers.length, 4));
 
@@ -145,7 +145,7 @@ function buildPdfDocument(
     doc
       .fontSize(16)
       .fillColor('#1E3A5F')
-      .text(companyName, { align: 'center' })
+      .text('VCHEMICS INDIA SOLUTIONS', { align: 'center' })
       .moveDown(0.2);
 
     doc
@@ -187,7 +187,6 @@ function buildPdfDocument(
     doc.fillColor('#1E293B').fontSize(7.5);
 
     rows.forEach((row, rowIdx) => {
-      // Calculate row height based on contents
       let rowHeight = 16;
       row.forEach((val) => {
         const textStr = val === null || val === undefined ? '' : String(val);
@@ -196,7 +195,7 @@ function buildPdfDocument(
       });
 
       // Strict overflow check before rendering row
-      if (startY + rowHeight > doc.page.height - doc.page.margins.bottom - 20) {
+      if (startY + rowHeight > doc.page.height - doc.page.margins.bottom - 25) {
         doc.addPage({ size: 'A4', layout: 'landscape', margin: 30 });
         startY = doc.page.margins.top;
         renderHeader(startY);
@@ -214,7 +213,9 @@ function buildPdfDocument(
         const isNumeric = typeof val === 'number';
         doc.text(textStr, startX + colIdx * colWidth + 2, startY + 3, {
           width: colWidth - 4,
+          height: rowHeight,
           align: isNumeric ? 'right' : colIdx === 0 ? 'left' : 'center',
+          lineBreak: false,
         });
       });
 
@@ -224,14 +225,23 @@ function buildPdfDocument(
 
     // Page Numbers and Footer (rendered strictly over populated pages)
     const pages = doc.bufferedPageRange();
+    doc.page.margins.bottom = 0; // Prevent auto addPage when drawing footers
     for (let i = pages.start; i < pages.start + pages.count; i++) {
       doc.switchToPage(i);
-      const footerY = doc.page.height - 25;
+      const footerY = doc.page.height - 20;
       doc
         .fontSize(8)
         .fillColor('#94A3B8')
-        .text('Generated from VChemics CEO Dashboard', doc.page.margins.left, footerY, { align: 'left', lineBreak: false })
-        .text(`Page ${i + 1} of ${pages.count}`, doc.page.margins.left, footerY, { align: 'right', lineBreak: false });
+        .text('Generated from VChemics CEO Dashboard', doc.page.margins.left, footerY, {
+          width: 400,
+          align: 'left',
+          lineBreak: false,
+        })
+        .text(`Page ${i + 1} of ${pages.count}`, doc.page.width - doc.page.margins.right - 150, footerY, {
+          width: 150,
+          align: 'right',
+          lineBreak: false,
+        });
     }
 
     doc.end();
@@ -246,7 +256,7 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
   try {
     const companyId = await ensureCompanyId();
     const company = await prisma.company.findUnique({ where: { id: companyId } });
-    const companyName = company?.displayName || 'VCHEMICS INDIA SOLUTIONS';
+    const companyName = 'VCHEMICS INDIA SOLUTIONS';
 
     const moduleName = String(req.params.module).toLowerCase();
     const format = String(req.query.format || 'xlsx').toLowerCase();

@@ -14,22 +14,37 @@ function num(x: unknown): number {
 
 function parseDateStr(s?: string): Date {
   if (!s) return new Date();
-  const d = new Date(s);
+  const t = s.trim();
+  if (/^\d{8}$/.test(t)) {
+    const y = parseInt(t.slice(0, 4), 10);
+    const m = parseInt(t.slice(4, 6), 10) - 1;
+    const d = parseInt(t.slice(6, 8), 10);
+    return new Date(Date.UTC(y, m, d));
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+  if (m) {
+    return new Date(Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!));
+  }
+  const d = new Date(t);
   return Number.isNaN(d.getTime()) ? new Date() : d;
 }
 
 /**
- * GET /api/reports/daily?date=2026-08-01
- * Daily Business Report API.
+ * GET /api/reports/daily?date=2026-08-01 or ?from=2026-08-01&to=2026-08-02
+ * Daily / Date-Range Business Report API.
  */
 reportsRouter.get('/daily', requireUser, async (req: Request, res: Response) => {
   try {
     const companyId = await ensureCompanyId();
-    const targetDate = parseDateStr(req.query.date as string);
 
-    const dayStart = new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth(), targetDate.getUTCDate()));
-    const dayEnd = new Date(dayStart);
-    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+    const fromStr = (req.query.from as string) || (req.query.date as string);
+    const toStr = (req.query.to as string) || (req.query.date as string);
+
+    const startDate = parseDateStr(fromStr);
+    const endDate = parseDateStr(toStr);
+
+    const dayStart = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate()));
+    const dayEnd = new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate() + 1));
 
     const vouchers = await prisma.voucher.findMany({
       where: {
@@ -77,6 +92,8 @@ reportsRouter.get('/daily', requireUser, async (req: Request, res: Response) => 
 
     res.json({
       date: dayStart.toISOString().split('T')[0],
+      fromDate: dayStart.toISOString().split('T')[0],
+      toDate: endDate.toISOString().split('T')[0],
       summary: {
         totalSales: Math.round(totalSales * 100) / 100,
         totalPurchase: Math.round(totalPurchase * 100) / 100,

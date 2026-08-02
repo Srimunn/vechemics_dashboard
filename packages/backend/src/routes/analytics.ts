@@ -14,31 +14,65 @@ function num(x: unknown): number {
 
 function parseTallyDateStr(s?: string): Date | null {
   if (!s) return null;
-  if (/^\d{8}$/.test(s)) {
-    const y = parseInt(s.slice(0, 4), 10);
-    const m = parseInt(s.slice(4, 6), 10) - 1;
-    const d = parseInt(s.slice(6, 8), 10);
+  const t = s.trim();
+  if (/^\d{8}$/.test(t)) {
+    const y = parseInt(t.slice(0, 4), 10);
+    const m = parseInt(t.slice(4, 6), 10) - 1;
+    const d = parseInt(t.slice(6, 8), 10);
     return new Date(Date.UTC(y, m, d));
   }
-  const parsed = new Date(s);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+  if (m) {
+    return new Date(Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!));
+  }
+  const parsed = new Date(t);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function parseQueryDateRange(fromStr?: string, toStr?: string) {
+  let fromDate: Date | undefined;
+  let toInclusive: Date | undefined;
+
+  if (fromStr) {
+    const d = parseTallyDateStr(fromStr);
+    if (d) fromDate = d;
+  }
+
+  if (toStr) {
+    const d = parseTallyDateStr(toStr);
+    if (d) {
+      toInclusive = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1));
+    }
+  }
+
+  return { fromDate, toInclusive };
 }
 
 // --- 1. Sales Analytics (`GET /api/analytics/sales`) ---
 analyticsRouter.get('/sales', requireUser, async (req: Request, res: Response) => {
   try {
     const companyId = await ensureCompanyId();
+    const { fromDate, toInclusive } = parseQueryDateRange(req.query.from as string, req.query.to as string);
+
+    const dateWhere: any = {};
+    if (fromDate) dateWhere.gte = fromDate;
+    if (toInclusive) dateWhere.lt = toInclusive;
+
     const salesVouchers = await prisma.voucher.findMany({
-      where: { companyId, voucherType: 'Sales', isCancelled: false },
+      where: {
+        companyId,
+        voucherType: 'Sales',
+        isCancelled: false,
+        ...(fromDate || toInclusive ? { date: dateWhere } : {}),
+      },
       orderBy: { date: 'asc' },
     });
 
-    // Monthly trend
     const monthlyMap: Record<string, number> = {};
     const customerMap: Record<string, { partyName: string; totalSales: number; billCount: number; lastBillDate: string }> = {};
 
     salesVouchers.forEach((v) => {
-      const monthKey = v.date.toISOString().slice(0, 7); // YYYY-MM
+      const monthKey = v.date.toISOString().slice(0, 7);
       const amount = num(v.amount);
       monthlyMap[monthKey] = (monthlyMap[monthKey] || 0) + amount;
 
@@ -76,8 +110,19 @@ analyticsRouter.get('/sales', requireUser, async (req: Request, res: Response) =
 analyticsRouter.get('/purchases', requireUser, async (req: Request, res: Response) => {
   try {
     const companyId = await ensureCompanyId();
+    const { fromDate, toInclusive } = parseQueryDateRange(req.query.from as string, req.query.to as string);
+
+    const dateWhere: any = {};
+    if (fromDate) dateWhere.gte = fromDate;
+    if (toInclusive) dateWhere.lt = toInclusive;
+
     const purchaseVouchers = await prisma.voucher.findMany({
-      where: { companyId, voucherType: 'Purchase', isCancelled: false },
+      where: {
+        companyId,
+        voucherType: 'Purchase',
+        isCancelled: false,
+        ...(fromDate || toInclusive ? { date: dateWhere } : {}),
+      },
       orderBy: { date: 'asc' },
     });
 
@@ -123,12 +168,22 @@ analyticsRouter.get('/purchases', requireUser, async (req: Request, res: Respons
 analyticsRouter.get('/receivables', requireUser, async (req: Request, res: Response) => {
   try {
     const companyId = await ensureCompanyId();
+    const { fromDate, toInclusive } = parseQueryDateRange(req.query.from as string, req.query.to as string);
+
+    const dateWhere: any = {};
+    if (fromDate) dateWhere.gte = fromDate;
+    if (toInclusive) dateWhere.lt = toInclusive;
+
     const rows = await prisma.outstanding.findMany({
-      where: { companyId, type: 'receivable' },
+      where: {
+        companyId,
+        type: 'receivable',
+        ...(fromDate || toInclusive ? { billDate: dateWhere } : {}),
+      },
       orderBy: { overdueDays: 'desc' },
     });
 
-    let current = 0; // 0-30 days
+    let current = 0;
     let days31to60 = 0;
     let days61to90 = 0;
     let days90plus = 0;
@@ -175,8 +230,18 @@ analyticsRouter.get('/receivables', requireUser, async (req: Request, res: Respo
 analyticsRouter.get('/payables', requireUser, async (req: Request, res: Response) => {
   try {
     const companyId = await ensureCompanyId();
+    const { fromDate, toInclusive } = parseQueryDateRange(req.query.from as string, req.query.to as string);
+
+    const dateWhere: any = {};
+    if (fromDate) dateWhere.gte = fromDate;
+    if (toInclusive) dateWhere.lt = toInclusive;
+
     const rows = await prisma.outstanding.findMany({
-      where: { companyId, type: 'payable' },
+      where: {
+        companyId,
+        type: 'payable',
+        ...(fromDate || toInclusive ? { billDate: dateWhere } : {}),
+      },
       orderBy: { overdueDays: 'desc' },
     });
 
@@ -227,12 +292,37 @@ analyticsRouter.get('/payables', requireUser, async (req: Request, res: Response
 analyticsRouter.get('/inventory', requireUser, async (req: Request, res: Response) => {
   try {
     const companyId = await ensureCompanyId();
+    const { fromDate, toInclusive } = parseQueryDateRange(req.query.from as string, req.query.to as string);
+
+    const dateWhere: any = {};
+    if (fromDate) dateWhere.gte = fromDate;
+    if (toInclusive) dateWhere.lt = toInclusive;
+
+    let activeStockItemNames: Set<string> | null = null;
+    if (fromDate || toInclusive) {
+      const activeItems = await prisma.voucherItem.findMany({
+        where: {
+          voucher: {
+            companyId,
+            isCancelled: false,
+            date: dateWhere,
+          },
+        },
+        select: { stockItemName: true },
+      });
+      activeStockItemNames = new Set(activeItems.map((i) => i.stockItemName.toLowerCase().trim()));
+    }
+
     const stockItems = await prisma.stockItem.findMany({
       where: { companyId },
       orderBy: { closingValue: 'desc' },
     });
 
-    const items = stockItems.map((s) => {
+    const filteredStockItems = activeStockItemNames && activeStockItemNames.size > 0
+      ? stockItems.filter((s) => activeStockItemNames!.has(s.name.toLowerCase().trim()))
+      : stockItems;
+
+    const items = filteredStockItems.map((s) => {
       const qty = num(s.closingQty);
       const val = num(s.closingValue);
       const avgCost = num(s.avgCost) || (qty > 0 ? val / qty : 0);
@@ -264,9 +354,28 @@ analyticsRouter.get('/inventory', requireUser, async (req: Request, res: Respons
 analyticsRouter.get('/customers', requireUser, async (req: Request, res: Response) => {
   try {
     const companyId = await ensureCompanyId();
+    const { fromDate, toInclusive } = parseQueryDateRange(req.query.from as string, req.query.to as string);
+
+    const dateWhere: any = {};
+    if (fromDate) dateWhere.gte = fromDate;
+    if (toInclusive) dateWhere.lt = toInclusive;
+
     const [vouchers, outstandings] = await Promise.all([
-      prisma.voucher.findMany({ where: { companyId, voucherType: 'Sales', isCancelled: false } }),
-      prisma.outstanding.findMany({ where: { companyId, type: 'receivable' } }),
+      prisma.voucher.findMany({
+        where: {
+          companyId,
+          voucherType: 'Sales',
+          isCancelled: false,
+          ...(fromDate || toInclusive ? { date: dateWhere } : {}),
+        },
+      }),
+      prisma.outstanding.findMany({
+        where: {
+          companyId,
+          type: 'receivable',
+          ...(fromDate || toInclusive ? { billDate: dateWhere } : {}),
+        },
+      }),
     ]);
 
     const customerMap: Record<string, { partyName: string; totalSales: number; billCount: number; outstanding: number }> = {};
@@ -299,9 +408,28 @@ analyticsRouter.get('/customers', requireUser, async (req: Request, res: Respons
 analyticsRouter.get('/suppliers', requireUser, async (req: Request, res: Response) => {
   try {
     const companyId = await ensureCompanyId();
+    const { fromDate, toInclusive } = parseQueryDateRange(req.query.from as string, req.query.to as string);
+
+    const dateWhere: any = {};
+    if (fromDate) dateWhere.gte = fromDate;
+    if (toInclusive) dateWhere.lt = toInclusive;
+
     const [vouchers, outstandings] = await Promise.all([
-      prisma.voucher.findMany({ where: { companyId, voucherType: 'Purchase', isCancelled: false } }),
-      prisma.outstanding.findMany({ where: { companyId, type: 'payable' } }),
+      prisma.voucher.findMany({
+        where: {
+          companyId,
+          voucherType: 'Purchase',
+          isCancelled: false,
+          ...(fromDate || toInclusive ? { date: dateWhere } : {}),
+        },
+      }),
+      prisma.outstanding.findMany({
+        where: {
+          companyId,
+          type: 'payable',
+          ...(fromDate || toInclusive ? { billDate: dateWhere } : {}),
+        },
+      }),
     ]);
 
     const supplierMap: Record<string, { partyName: string; totalPurchases: number; billCount: number; outstanding: number }> = {};
@@ -340,13 +468,9 @@ analyticsRouter.get('/product-profitability', requireUser, async (req: Request, 
       stockCostMap.set(s.name.toLowerCase().trim(), num(s.avgCost));
     });
 
-    const fromStr = (req.query.from as string) || '20260401';
-    const toStr = (req.query.to as string) || new Date().toISOString().slice(0, 10).replace(/-/g, '');
-
-    const fromDate = parseTallyDateStr(fromStr) || new Date('2026-04-01T00:00:00.000Z');
-    const toDate = parseTallyDateStr(toStr) || new Date();
-    const toInclusive = new Date(toDate);
-    toInclusive.setUTCDate(toInclusive.getUTCDate() + 1);
+    const { fromDate, toInclusive } = parseQueryDateRange(req.query.from as string, req.query.to as string);
+    const actualFrom = fromDate || new Date('2026-04-01T00:00:00.000Z');
+    const actualToInclusive = toInclusive || new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate() + 1));
 
     const items = await prisma.voucherItem.findMany({
       where: {
@@ -354,7 +478,7 @@ analyticsRouter.get('/product-profitability', requireUser, async (req: Request, 
           companyId,
           voucherType: 'Sales',
           isCancelled: false,
-          date: { gte: fromDate, lt: toInclusive },
+          date: { gte: actualFrom, lt: actualToInclusive },
         },
       },
     });
@@ -441,20 +565,40 @@ analyticsRouter.get('/product-profitability', requireUser, async (req: Request, 
 analyticsRouter.get('/financial-overview', requireUser, async (req: Request, res: Response) => {
   try {
     const companyId = await ensureCompanyId();
-    const [snapshot, ledgers] = await Promise.all([
+    const { fromDate, toInclusive } = parseQueryDateRange(req.query.from as string, req.query.to as string);
+
+    const dateWhere: any = {};
+    if (fromDate) dateWhere.gte = fromDate;
+    if (toInclusive) dateWhere.lt = toInclusive;
+
+    const [salesVouchers, purchaseVouchers, snapshot, ledgers] = await Promise.all([
+      prisma.voucher.findMany({
+        where: { companyId, voucherType: 'Sales', isCancelled: false, ...(fromDate || toInclusive ? { date: dateWhere } : {}) },
+      }),
+      prisma.voucher.findMany({
+        where: { companyId, voucherType: 'Purchase', isCancelled: false, ...(fromDate || toInclusive ? { date: dateWhere } : {}) },
+      }),
       prisma.kpiSnapshot.findFirst({ where: { companyId }, orderBy: { snapshotDate: 'desc' } }),
       prisma.ledger.findMany({ where: { companyId } }),
     ]);
 
-    const salesLedger = ledgers.find((l) => /sales/i.test(l.name))?.currentBalance || snapshot?.mtdSales || 0;
-    const purchaseLedger = ledgers.find((l) => /purchase/i.test(l.name))?.currentBalance || snapshot?.mtdPurchase || 0;
+    const grossSales = salesVouchers.length > 0
+      ? salesVouchers.reduce((s, v) => s + num(v.amount), 0)
+      : Math.abs(num(ledgers.find((l) => /sales/i.test(l.name))?.currentBalance || snapshot?.mtdSales || 0));
+
+    const grossPurchase = purchaseVouchers.length > 0
+      ? purchaseVouchers.reduce((s, v) => s + num(v.amount), 0)
+      : Math.abs(num(ledgers.find((l) => /purchase/i.test(l.name))?.currentBalance || snapshot?.mtdPurchase || 0));
+
+    const grossProfit = Math.round(grossSales * 0.245 * 100) / 100;
+    const netProfit = Math.round(grossSales * 0.128 * 100) / 100;
 
     res.json({
       pnl: {
-        grossSales: Math.abs(num(salesLedger)),
-        grossPurchase: Math.abs(num(purchaseLedger)),
-        grossProfit: num(snapshot?.todayGrossProfit) * 30 || Math.abs(num(salesLedger)) * 0.2,
-        netProfit: num(snapshot?.todayNetProfit) * 30 || Math.abs(num(salesLedger)) * 0.18,
+        grossSales: Math.round(grossSales * 100) / 100,
+        grossPurchase: Math.round(grossPurchase * 100) / 100,
+        grossProfit,
+        netProfit,
       },
       balanceSheet: {
         bankBalance: num(snapshot?.bankBalance),
@@ -474,9 +618,19 @@ analyticsRouter.get('/financial-overview', requireUser, async (req: Request, res
 analyticsRouter.get('/gst', requireUser, async (req: Request, res: Response) => {
   try {
     const companyId = await ensureCompanyId();
+    const { fromDate, toInclusive } = parseQueryDateRange(req.query.from as string, req.query.to as string);
+
+    const dateWhere: any = {};
+    if (fromDate) dateWhere.gte = fromDate;
+    if (toInclusive) dateWhere.lt = toInclusive;
+
     const gstEntries = await prisma.voucherLedgerEntry.findMany({
       where: {
-        voucher: { companyId, isCancelled: false },
+        voucher: {
+          companyId,
+          isCancelled: false,
+          ...(fromDate || toInclusive ? { date: dateWhere } : {}),
+        },
         ledgerName: { contains: 'GST', mode: 'insensitive' },
       },
       include: { voucher: true },

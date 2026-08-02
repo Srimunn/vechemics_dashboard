@@ -72,46 +72,14 @@ function CeoSkeleton() {
 export default function CeoDashboardPage() {
   const router = useRouter();
   const [data, setData] = React.useState<CeoDashboardResponse | null>(null);
-  const [glanceData, setGlanceData] = React.useState<any>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(false);
-
   const load = React.useCallback(async () => {
     setLoading(true);
     setError(false);
     try {
       const ceoData = await getCeoDashboard();
       setData(ceoData);
-
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
-      const token = typeof window !== 'undefined' ? localStorage.getItem('vchemics_auth_token') : null;
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const [resCust, resProd, resBill] = await Promise.all([
-        fetch(`${backendUrl}/api/analytics/customers`, { headers }),
-        fetch(`${backendUrl}/api/analytics/product-profitability`, { headers }),
-        fetch(`${backendUrl}/api/bill-pnl`, { headers }),
-      ]);
-
-      let topCustomers: any[] = [];
-      let topProducts: any[] = [];
-      let recentBills: any[] = [];
-
-      if (resCust.ok) {
-        const json = await resCust.json();
-        topCustomers = (json.customers || []).slice(0, 5);
-      }
-      if (resProd.ok) {
-        const json = await resProd.json();
-        topProducts = (json.items || []).slice(0, 5);
-      }
-      if (resBill.ok) {
-        const json = await resBill.json();
-        recentBills = (json.records || []).slice(0, 5);
-      }
-
-      setGlanceData({ topCustomers, topProducts, recentBills });
     } catch {
       setError(true);
     } finally {
@@ -244,61 +212,7 @@ export default function CeoDashboardPage() {
         })}
       </div>
 
-      {/* 4D: "Business at a Glance" Section */}
-      <div className="space-y-4 pt-2">
-        <h2 className="text-[18px] font-bold text-[#0F172A] tracking-tight">
-          Business at a Glance <span className="text-xs font-normal text-gray-500">(Top Performers &amp; Recent Activity)</span>
-        </h2>
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Top 5 Customers */}
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <h3 className="flex items-center gap-2 text-sm font-bold text-gray-900 border-b pb-2 mb-3">
-              <Users className="h-4 w-4 text-blue-600" /> Top 5 Customers This Month
-            </h3>
-            <div className="space-y-2 text-xs">
-              {(glanceData?.topCustomers || []).map((c: any, idx: number) => (
-                <div key={idx} className="flex justify-between items-center py-1 border-b border-gray-100">
-                  <span className="font-medium text-gray-800 truncate max-w-[170px]">{c.partyName}</span>
-                  <span className="font-bold text-blue-700">{formatINR(c.totalSales)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
 
-          {/* Top 5 Products */}
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <h3 className="flex items-center gap-2 text-sm font-bold text-gray-900 border-b pb-2 mb-3">
-              <ShoppingCart className="h-4 w-4 text-emerald-600" /> Top 5 Products Revenue
-            </h3>
-            <div className="space-y-2 text-xs">
-              {(glanceData?.topProducts || []).map((p: any, idx: number) => (
-                <div key={idx} className="flex justify-between items-center py-1 border-b border-gray-100">
-                  <span className="font-medium text-gray-800 truncate max-w-[170px]">{p.stockItemName}</span>
-                  <span className="font-bold text-emerald-700">{formatINR(p.totalSaleAmount)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Recent Invoices */}
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <h3 className="flex items-center gap-2 text-sm font-bold text-gray-900 border-b pb-2 mb-3">
-              <FileText className="h-4 w-4 text-purple-600" /> Recent Sales Invoices
-            </h3>
-            <div className="space-y-2 text-xs">
-              {(glanceData?.recentBills || []).map((b: any, idx: number) => (
-                <div key={idx} className="flex justify-between items-center py-1 border-b border-gray-100">
-                  <div>
-                    <span className="font-bold text-gray-900">{b.voucherNumber}</span>
-                    <p className="text-[10px] text-gray-400 truncate max-w-[130px]">{b.customerName}</p>
-                  </div>
-                  <span className="font-bold text-purple-700">{formatINR(b.saleValue)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Secondary charts */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

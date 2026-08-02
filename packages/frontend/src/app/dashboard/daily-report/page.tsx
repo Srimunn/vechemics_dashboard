@@ -1,15 +1,24 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FileText, RefreshCw, Printer, Calendar, IndianRupee } from 'lucide-react';
+import { FileText, RefreshCw, Printer, IndianRupee } from 'lucide-react';
 import { ExportButton } from '@/components/ui/ExportButton';
+import { DateRangePicker } from '@/components/ui/DateRangePicker';
 
 function formatINR(val: number): string {
   return '₹' + new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(val);
 }
 
 export default function DailyReportPage() {
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]!);
+  const getStartOfMonth = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  };
+  const getTodayStr = () => new Date().toISOString().split('T')[0]!;
+
+  const [fromDate, setFromDate] = useState(getStartOfMonth());
+  const [toDate, setToDate] = useState(getTodayStr());
+
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -21,7 +30,7 @@ export default function DailyReportPage() {
       const headers: Record<string, string> = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch(`${backendUrl}/api/reports/daily?date=${selectedDate}`, { headers });
+      const res = await fetch(`${backendUrl}/api/reports/daily?from=${fromDate}&to=${toDate}`, { headers });
       if (res.ok) {
         const json = await res.json();
         setData(json);
@@ -35,7 +44,7 @@ export default function DailyReportPage() {
 
   useEffect(() => {
     fetchData();
-  }, [selectedDate]);
+  }, [fromDate, toDate]);
 
   return (
     <div className="space-y-6 print:space-y-4 print:p-0">
@@ -49,15 +58,10 @@ export default function DailyReportPage() {
           <p className="text-sm text-[#64748B]">Single end-of-day snapshot of sales, purchases, and cash flows.</p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm">
-            <Calendar className="h-4 w-4 text-gray-400" />
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="text-sm focus:outline-none"
-            />
-          </div>
+          <button onClick={fetchData} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm">
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
           <button
             onClick={() => window.print()}
             className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm"
@@ -65,14 +69,19 @@ export default function DailyReportPage() {
             <Printer className="h-4 w-4" />
             Print
           </button>
-          <ExportButton moduleName="daily-report" label="Export" fromDate={selectedDate} toDate={selectedDate} />
+          <ExportButton moduleName="daily-report" label="Export" fromDate={fromDate} toDate={toDate} />
         </div>
+      </div>
+
+      {/* Date Range Picker */}
+      <div className="print:hidden">
+        <DateRangePicker initialFrom={fromDate} initialTo={toDate} onApply={(from, to) => { setFromDate(from); setToDate(to); }} />
       </div>
 
       {/* Printable Header */}
       <div className="hidden print:block text-center border-b pb-4 mb-4">
         <h1 className="text-2xl font-bold text-gray-900">VChemics India Solutions</h1>
-        <h2 className="text-lg font-semibold text-gray-700">Daily Business Report — {selectedDate}</h2>
+        <h2 className="text-lg font-semibold text-gray-700">Daily Business Report — {fromDate} to {toDate}</h2>
       </div>
 
       {/* Summary Cards */}

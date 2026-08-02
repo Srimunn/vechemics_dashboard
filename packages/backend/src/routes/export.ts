@@ -1,4 +1,6 @@
 import { Router, type Request, type Response } from 'express';
+import ExcelJS from 'exceljs';
+import PDFDocument from 'pdfkit';
 import { prisma } from '../lib/prisma.js';
 import { ensureCompanyId } from '../lib/company.js';
 import { requireUser } from '../middleware/auth.js';
@@ -24,22 +26,215 @@ function arrayToCsv(headers: string[], rows: (string | number)[][]): string {
   return [headerLine, ...dataLines].join('\r\n');
 }
 
+/** Build native Microsoft Excel (.xlsx) buffer using exceljs */
+async function buildExcelWorkbook(
+  title: string,
+  companyName: string,
+  dateStr: string,
+  headers: string[],
+  rows: (string | number)[][],
+  currencyColIndices: number[] = [],
+): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const sheetName = title.slice(0, 31).replace(/[:\\/?*\[\]]/g, '');
+  const worksheet = workbook.addWorksheet(sheetName || 'Report');
+
+  // Header Row 1: Company Name
+  const companyRow = worksheet.addRow([companyName]);
+  companyRow.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FF1E3A5F' } };
+  worksheet.mergeCells(1, 1, 1, Math.max(headers.length, 4));
+
+  // Header Row 2: Report Title & Date
+  const titleRow = worksheet.addRow([`${title} — Generated: ${dateStr}`]);
+  titleRow.font = { name: 'Calibri', size: 11, italic: true, color: { argb: 'FF475569' } };
+  worksheet.mergeCells(2, 1, 2, Math.max(headers.length, 4));
+
+  // Blank row
+  worksheet.addRow([]);
+
+  // Column Headers Row (Row 4)
+  const headerRow = worksheet.addRow(headers);
+  headerRow.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+  headerRow.eachCell((cell) => {
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF1E3A5F' },
+    };
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+  });
+
+  // Data Rows
+  rows.forEach((r) => {
+    const row = worksheet.addRow(r);
+    row.font = { name: 'Calibri', size: 10 };
+    r.forEach((val, idx) => {
+      const cell = row.getCell(idx + 1);
+      if (typeof val === 'number') {
+        if (currencyColIndices.includes(idx)) {
+          cell.numFmt = '₹#,##0.00';
+        } else {
+          cell.numFmt = '#,##0.00';
+        }
+      }
+    });
+  });
+
+  // Auto-width columns
+  worksheet.columns.forEach((column, colIdx) => {
+    let maxLen = headers[colIdx] ? headers[colIdx].length : 10;
+    rows.forEach((r) => {
+      const cellVal = r[colIdx];
+      if (cellVal !== null && cellVal !== undefined) {
+        maxLen = Math.max(maxLen, String(cellVal).length);
+      }
+    });
+    column.width = Math.min(Math.max(maxLen + 4, 12), 45);
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}
+
+/** Build printable PDF document buffer using pdfkit */
+function buildPdfDocument(
+  title: string,
+  companyName: string,
+  dateStr: string,
+  headers: string[],
+  rows: (string | number)[][],
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({
+      size: 'A4',
+      layout: 'landscape',
+      margin: 30,
+      bufferPages: true,
+    });
+
+    const buffers: Buffer[] = [];
+    doc.on('data', (chunk) => buffers.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(buffers)));
+    doc.on('error', (err) => reject(err));
+
+    // Company Letterhead (Centered at top)
+    doc
+      .fontSize(16)
+      .fillColor('#1E3A5F')
+      .text(companyName, { align: 'center' })
+      .moveDown(0.2);
+
+    doc
+      .fontSize(12)
+      .fillColor('#2563EB')
+      .text(title, { align: 'center' })
+      .moveDown(0.2);
+
+    doc
+      .fontSize(9)
+      .fillColor('#64748B')
+      .text(`Report Date: ${dateStr}`, { align: 'center' })
+      .moveDown(0.8);
+
+    // Table settings
+    const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right; // ~781 pt
+    const colCount = Math.max(headers.length, 1);
+    const colWidth = Math.floor(pageWidth / colCount);
+
+    let startX = doc.page.margins.left;
+    let startY = doc.y;
+
+    // Header Background
+    doc.rect(startX, startY, pageWidth, 20).fill('#1E3A5F');
+    doc.fillColor('#FFFFFF').fontSize(8);
+
+    headers.forEach((h, i) => {
+      doc.text(h, startX + i * colWidth + 2, startY + 5, {
+        width: colWidth - 4,
+        align: i === 0 ? 'left' : 'center',
+      });
+    });
+
+    startY += 20;
+
+    // Data Rows
+    doc.fillColor('#1E293B').fontSize(7.5);
+    rows.forEach((row, rowIdx) => {
+      if (startY > doc.page.height - doc.page.margins.bottom - 40) {
+        doc.addPage({ size: 'A4', layout: 'landscape', margin: 30 });
+        startY = doc.page.margins.top;
+
+        // Repeat Header
+        doc.rect(startX, startY, pageWidth, 20).fill('#1E3A5F');
+        doc.fillColor('#FFFFFF').fontSize(8);
+        headers.forEach((h, i) => {
+          doc.text(h, startX + i * colWidth + 2, startY + 5, {
+            width: colWidth - 4,
+            align: i === 0 ? 'left' : 'center',
+          });
+        });
+        startY += 20;
+        doc.fillColor('#1E293B').fontSize(7.5);
+      }
+
+      if (rowIdx % 2 === 1) {
+        doc.rect(startX, startY, pageWidth, 16).fill('#F8FAFC');
+        doc.fillColor('#1E293B');
+      }
+
+      row.forEach((val, colIdx) => {
+        const textStr = val === null || val === undefined ? '' : String(val);
+        const isNumeric = typeof val === 'number';
+        doc.text(textStr, startX + colIdx * colWidth + 2, startY + 3, {
+          width: colWidth - 4,
+          align: isNumeric ? 'right' : colIdx === 0 ? 'left' : 'center',
+        });
+      });
+
+      doc.moveTo(startX, startY + 16).lineTo(startX + pageWidth, startY + 16).strokeColor('#E2E8F0').stroke();
+      startY += 16;
+    });
+
+    // Page Numbers and Footer
+    const pages = doc.bufferedPageRange();
+    for (let i = 0; i < pages.count; i++) {
+      doc.switchToPage(i);
+      const footerY = doc.page.height - 25;
+      doc
+        .fontSize(8)
+        .fillColor('#94A3B8')
+        .text('Generated from VChemics CEO Dashboard', doc.page.margins.left, footerY, { align: 'left' })
+        .text(`Page ${i + 1} of ${pages.count}`, doc.page.margins.left, footerY, { align: 'right' });
+    }
+
+    doc.end();
+  });
+}
+
 /**
- * GET /api/export/:module?format=csv
- * Downloads Excel/CSV report for any dashboard module.
+ * GET /api/export/:module?format=xlsx|pdf|csv
+ * Downloads Excel (.xlsx), PDF (.pdf), or CSV report for any dashboard module.
  */
 exportRouter.get('/:module', requireUser, async (req: Request, res: Response) => {
   try {
     const companyId = await ensureCompanyId();
-    const moduleName = String(req.params.module).toLowerCase();
-    const dateStr = new Date().toISOString().split('T')[0];
-    const filename = `VChemics_${moduleName.toUpperCase()}_${dateStr}.csv`;
+    const company = await prisma.company.findUnique({ where: { id: companyId } });
+    const companyName = company?.displayName || 'VCHEMICS INDIA SOLUTIONS';
 
+    const moduleName = String(req.params.module).toLowerCase();
+    const format = String(req.query.format || 'xlsx').toLowerCase();
+    const dateStr = new Date().toISOString().split('T')[0]!;
+
+    let reportTitle = moduleName.toUpperCase().replace(/-/g, ' ');
     let headers: string[] = [];
     let rows: (string | number)[][] = [];
+    let currencyColIndices: number[] = [];
 
     if (moduleName === 'bill-pnl') {
-      headers = ['Date', 'Voucher Number', 'Party Name', 'Stock Item', 'Qty', 'Unit', 'Sale Rate', 'Cost Rate', 'Sale Amount', 'Cost Amount', 'Profit', 'Margin %'];
+      reportTitle = 'Bill-wise Profit & Loss';
+      headers = ['Date', 'Invoice#', 'Customer Name', 'Stock Item', 'Qty', 'Unit', 'Sale Rate', 'Cost Rate', 'Sale Value', 'Cost Value', 'Profit', 'Margin %'];
+      currencyColIndices = [6, 7, 8, 9, 10];
+
       const sales = await prisma.voucher.findMany({
         where: { companyId, voucherType: 'Sales', isCancelled: false },
         include: { items: true },
@@ -68,7 +263,7 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
             const margin = num(item.marginPct) || (saleAmt > 0 ? (profit / saleAmt) * 100 : 0);
 
             rows.push([
-              vDate, vNum, party, item.stockItemName, qty, item.unit,
+              vDate, vNum, party, item.stockItemName, qty, item.unit || 'NOS',
               Math.round(saleRate * 100) / 100, Math.round(costRate * 100) / 100,
               Math.round(saleAmt * 100) / 100, Math.round(costAmt * 100) / 100,
               Math.round(profit * 100) / 100, Math.round(margin * 10) / 10,
@@ -76,73 +271,11 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
           });
         }
       });
-    } else if (moduleName === 'receivables') {
-      headers = ['Bill Date', 'Reference', 'Customer Name', 'Due Date', 'Pending Amount', 'Overdue Days'];
-      const items = await prisma.outstanding.findMany({
-        where: { companyId, type: 'receivable' },
-        orderBy: { overdueDays: 'desc' },
-      });
-      rows = items.map((i) => [
-        i.billDate.toISOString().split('T')[0]!,
-        i.billRef,
-        i.partyName,
-        i.dueDate ? i.dueDate.toISOString().split('T')[0]! : '-',
-        num(i.pendingAmount),
-        i.overdueDays,
-      ]);
-    } else if (moduleName === 'payables') {
-      headers = ['Bill Date', 'Reference', 'Supplier Name', 'Due Date', 'Pending Amount', 'Overdue Days'];
-      const items = await prisma.outstanding.findMany({
-        where: { companyId, type: 'payable' },
-        orderBy: { overdueDays: 'desc' },
-      });
-      rows = items.map((i) => [
-        i.billDate.toISOString().split('T')[0]!,
-        i.billRef,
-        i.partyName,
-        i.dueDate ? i.dueDate.toISOString().split('T')[0]! : '-',
-        num(i.pendingAmount),
-        i.overdueDays,
-      ]);
-    } else if (moduleName === 'inventory') {
-      headers = ['Stock Item Name', 'Unit', 'Closing Qty', 'Avg Cost', 'Closing Value'];
-      const items = await prisma.stockItem.findMany({
-        where: { companyId },
-        orderBy: { closingValue: 'desc' },
-      });
-      rows = items.map((i) => [
-        i.name,
-        i.unit || 'NOS',
-        num(i.closingQty),
-        num(i.avgCost),
-        num(i.closingValue),
-      ]);
-    } else if (moduleName === 'sales' || moduleName === 'sales-analytics') {
-      headers = ['Date', 'Voucher Number', 'Customer Name', 'Amount'];
-      const items = await prisma.voucher.findMany({
-        where: { companyId, voucherType: 'Sales', isCancelled: false },
-        orderBy: { date: 'desc' },
-      });
-      rows = items.map((i) => [
-        i.date.toISOString().split('T')[0]!,
-        i.voucherNumber,
-        i.partyName || 'Cash / Counter Sale',
-        num(i.amount),
-      ]);
-    } else if (moduleName === 'purchases' || moduleName === 'purchase-analytics') {
-      headers = ['Date', 'Voucher Number', 'Supplier Name', 'Amount'];
-      const items = await prisma.voucher.findMany({
-        where: { companyId, voucherType: 'Purchase', isCancelled: false },
-        orderBy: { date: 'desc' },
-      });
-      rows = items.map((i) => [
-        i.date.toISOString().split('T')[0]!,
-        i.voucherNumber,
-        i.partyName || 'Cash Purchase',
-        num(i.amount),
-      ]);
     } else if (moduleName === 'product-profitability') {
+      reportTitle = 'Product Profitability Report';
       headers = ['Stock Item Name', 'Unit', 'Total Qty Sold', 'Avg Sale Rate', 'Avg Cost Rate', 'Total Sale Value', 'Total Cost Value', 'Total Profit', 'Margin %', 'Estimated Cost'];
+      currencyColIndices = [3, 4, 5, 6, 7];
+
       const stockItems = await prisma.stockItem.findMany({ where: { companyId } });
       const stockCostMap = new Map<string, number>();
       stockItems.forEach((s) => stockCostMap.set(s.name.toLowerCase().trim(), num(s.avgCost)));
@@ -183,8 +316,167 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
           Math.round(profit * 100) / 100, Math.round(margin * 10) / 10, p.isEstimated ? 'YES' : 'NO',
         ];
       });
+    } else if (moduleName === 'sales' || moduleName === 'sales-analytics') {
+      reportTitle = 'Sales Analytics Report';
+      headers = ['Date', 'Voucher Number', 'Customer Name', 'Amount'];
+      currencyColIndices = [3];
+
+      const items = await prisma.voucher.findMany({
+        where: { companyId, voucherType: 'Sales', isCancelled: false },
+        orderBy: { date: 'desc' },
+      });
+      rows = items.map((i) => [
+        i.date.toISOString().split('T')[0]!,
+        i.voucherNumber,
+        i.partyName || 'Cash / Counter Sale',
+        num(i.amount),
+      ]);
+    } else if (moduleName === 'purchases' || moduleName === 'purchase-analytics') {
+      reportTitle = 'Purchase Analytics Report';
+      headers = ['Date', 'Voucher Number', 'Supplier Name', 'Amount'];
+      currencyColIndices = [3];
+
+      const items = await prisma.voucher.findMany({
+        where: { companyId, voucherType: 'Purchase', isCancelled: false },
+        orderBy: { date: 'desc' },
+      });
+      rows = items.map((i) => [
+        i.date.toISOString().split('T')[0]!,
+        i.voucherNumber,
+        i.partyName || 'Cash Purchase',
+        num(i.amount),
+      ]);
+    } else if (moduleName === 'receivables') {
+      reportTitle = 'Bills Receivable & Aging Schedule';
+      headers = ['Bill Date', 'Bill Ref', 'Customer Name', 'Due Date', 'Pending Amount', 'Overdue Days', 'Aging Bucket'];
+      currencyColIndices = [4];
+
+      const items = await prisma.outstanding.findMany({
+        where: { companyId, type: 'receivable' },
+        orderBy: { overdueDays: 'desc' },
+      });
+      rows = items.map((i) => {
+        const days = i.overdueDays;
+        const bucket = days <= 30 ? '0-30 Days' : days <= 60 ? '31-60 Days' : days <= 90 ? '61-90 Days' : '90+ Days';
+        return [
+          i.billDate.toISOString().split('T')[0]!,
+          i.billRef,
+          i.partyName,
+          i.dueDate ? i.dueDate.toISOString().split('T')[0]! : '-',
+          num(i.pendingAmount),
+          days,
+          bucket,
+        ];
+      });
+    } else if (moduleName === 'payables') {
+      reportTitle = 'Bills Payable & Aging Schedule';
+      headers = ['Bill Date', 'Bill Ref', 'Supplier Name', 'Due Date', 'Pending Amount', 'Overdue Days', 'Aging Bucket'];
+      currencyColIndices = [4];
+
+      const items = await prisma.outstanding.findMany({
+        where: { companyId, type: 'payable' },
+        orderBy: { overdueDays: 'desc' },
+      });
+      rows = items.map((i) => {
+        const days = i.overdueDays;
+        const bucket = days <= 30 ? '0-30 Days' : days <= 60 ? '31-60 Days' : days <= 90 ? '61-90 Days' : '90+ Days';
+        return [
+          i.billDate.toISOString().split('T')[0]!,
+          i.billRef,
+          i.partyName,
+          i.dueDate ? i.dueDate.toISOString().split('T')[0]! : '-',
+          num(i.pendingAmount),
+          days,
+          bucket,
+        ];
+      });
+    } else if (moduleName === 'inventory') {
+      reportTitle = 'Stock Inventory Valuation Report';
+      headers = ['Stock Item Name', 'Unit', 'Closing Qty', 'Avg Cost Rate', 'Closing Value'];
+      currencyColIndices = [3, 4];
+
+      const items = await prisma.stockItem.findMany({
+        where: { companyId },
+        orderBy: { closingValue: 'desc' },
+      });
+      rows = items.map((i) => [
+        i.name,
+        i.unit || 'NOS',
+        num(i.closingQty),
+        num(i.avgCost),
+        num(i.closingValue),
+      ]);
+    } else if (moduleName === 'customers') {
+      reportTitle = 'Customer Performance & Master Report';
+      headers = ['Customer Name', 'GSTIN', 'State', 'Outstanding Receivable', 'Total Sales Revenue'];
+      currencyColIndices = [3, 4];
+
+      const salesVouchers = await prisma.voucher.findMany({
+        where: { companyId, voucherType: 'Sales', isCancelled: false },
+      });
+      const customerSalesMap = new Map<string, number>();
+      salesVouchers.forEach((v) => {
+        const name = v.partyName?.trim();
+        if (!name) return;
+        customerSalesMap.set(name, (customerSalesMap.get(name) || 0) + num(v.amount));
+      });
+
+      const receivables = await prisma.outstanding.findMany({
+        where: { companyId, type: 'receivable' },
+      });
+      const customerRecMap = new Map<string, number>();
+      receivables.forEach((r) => {
+        const name = r.partyName.trim();
+        if (!name) return;
+        customerRecMap.set(name, (customerRecMap.get(name) || 0) + num(r.pendingAmount));
+      });
+
+      const partyNames = new Set([...customerSalesMap.keys(), ...customerRecMap.keys()]);
+      rows = Array.from(partyNames).map((name) => [
+        name,
+        '-',
+        'Tamil Nadu',
+        customerRecMap.get(name) || 0,
+        customerSalesMap.get(name) || 0,
+      ]);
+    } else if (moduleName === 'suppliers') {
+      reportTitle = 'Supplier Spend & Master Report';
+      headers = ['Supplier Name', 'GSTIN', 'State', 'Outstanding Payable', 'Total Purchase Spend'];
+      currencyColIndices = [3, 4];
+
+      const purchaseVouchers = await prisma.voucher.findMany({
+        where: { companyId, voucherType: 'Purchase', isCancelled: false },
+      });
+      const supplierSpendMap = new Map<string, number>();
+      purchaseVouchers.forEach((v) => {
+        const name = v.partyName?.trim();
+        if (!name) return;
+        supplierSpendMap.set(name, (supplierSpendMap.get(name) || 0) + num(v.amount));
+      });
+
+      const payables = await prisma.outstanding.findMany({
+        where: { companyId, type: 'payable' },
+      });
+      const supplierPayMap = new Map<string, number>();
+      payables.forEach((p) => {
+        const name = p.partyName.trim();
+        if (!name) return;
+        supplierPayMap.set(name, (supplierPayMap.get(name) || 0) + num(p.pendingAmount));
+      });
+
+      const partyNames = new Set([...supplierSpendMap.keys(), ...supplierPayMap.keys()]);
+      rows = Array.from(partyNames).map((name) => [
+        name,
+        '-',
+        'Tamil Nadu',
+        supplierPayMap.get(name) || 0,
+        supplierSpendMap.get(name) || 0,
+      ]);
     } else if (moduleName === 'gst') {
-      headers = ['Ledger Name', 'Voucher Number', 'Voucher Date', 'Type', 'Amount'];
+      reportTitle = 'GST Output & Input Summary';
+      headers = ['Ledger Name', 'Voucher Number', 'Voucher Date', 'GST Type', 'Amount'];
+      currencyColIndices = [4];
+
       let entries = await prisma.voucherLedgerEntry.findMany({
         where: {
           voucher: { companyId, isCancelled: false },
@@ -209,7 +501,10 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
         num(e.amount),
       ]);
     } else if (moduleName === 'daily-report') {
+      reportTitle = 'Daily Business Activity Report';
       headers = ['Date', 'Voucher Type', 'Voucher Number', 'Party Name', 'Amount'];
+      currencyColIndices = [4];
+
       const today = new Date();
       const dayStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
       const dayEnd = new Date(dayStart);
@@ -234,7 +529,10 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
         num(v.amount),
       ]);
     } else if (moduleName === 'financial-overview' || moduleName === 'pnl' || moduleName === 'balance-sheet') {
-      headers = ['Metric Name', 'Category', 'Amount (INR)'];
+      reportTitle = 'Executive Financial Overview';
+      headers = ['Metric Name', 'Financial Statement', 'Amount (INR)'];
+      currencyColIndices = [2];
+
       const snapshot = await prisma.kpiSnapshot.findFirst({ where: { companyId }, orderBy: { snapshotDate: 'desc' } });
       rows = [
         ['Sales Revenue (MTD)', 'Profit & Loss', num(snapshot?.mtdSales)],
@@ -249,16 +547,33 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
         ['Net GST Payable', 'Balance Sheet', num(snapshot?.gstPayable)],
       ];
     } else {
-      headers = ['Ledger / Master Name', 'Type', 'Amount'];
-      const ledgers = await prisma.ledger.findMany({ where: { companyId }, take: 50 });
+      reportTitle = 'Master Records Report';
+      headers = ['Ledger / Master Name', 'Group / Type', 'Current Balance'];
+      currencyColIndices = [2];
+
+      const ledgers = await prisma.ledger.findMany({ where: { companyId }, take: 100 });
       rows = ledgers.map((l) => [l.name, l.parentGroup || 'Ledger', Math.abs(num(l.currentBalance))]);
     }
 
-    const csvContent = arrayToCsv(headers, rows);
+    const safeFilenamePrefix = `VChemics_${moduleName.toUpperCase().replace(/-/g, '_')}_${dateStr}`;
 
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.status(200).send(csvContent);
+    if (format === 'pdf') {
+      const buffer = await buildPdfDocument(reportTitle, companyName, dateStr, headers, rows);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeFilenamePrefix}.pdf"`);
+      res.status(200).send(buffer);
+    } else if (format === 'csv') {
+      const csvContent = arrayToCsv(headers, rows);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeFilenamePrefix}.csv"`);
+      res.status(200).send(csvContent);
+    } else {
+      // Default: format=xlsx (Native Excel)
+      const buffer = await buildExcelWorkbook(reportTitle, companyName, dateStr, headers, rows, currencyColIndices);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeFilenamePrefix}.xlsx"`);
+      res.status(200).send(buffer);
+    }
   } catch (err) {
     res.status(500).json({ error: 'Export failed', detail: String(err) });
   }

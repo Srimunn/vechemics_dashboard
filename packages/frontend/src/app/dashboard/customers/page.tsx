@@ -56,7 +56,7 @@ export default function CustomersPage() {
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
-          <ExportButton moduleName="sales" label="Export Excel" />
+          <ExportButton moduleName="customers" label="Export" />
         </div>
       </div>
 

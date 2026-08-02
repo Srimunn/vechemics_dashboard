@@ -141,9 +141,25 @@ export function TopBar({ userName = 'Velmurugan', userRole = 'CEO / MD' }: { use
         <div className="flex items-center gap-3">
           {/* Header Control Filters */}
           <div className="hidden items-center gap-[8px] xl:flex">
-            {/* Company Dropdown (Read-Only) */}
-            <div className="flex items-center gap-1 rounded-lg border border-[#E2E8F0] bg-[#FFFFFF] px-2.5 py-1.5 text-[12px] font-medium text-[#334155]">
-              <span className="font-semibold text-blue-700">Company:</span> VChemics India Solutions
+            {/* Company Switcher Dropdown Preparation */}
+            <div className="relative flex items-center">
+              <span className="mr-1.5 text-[12px] font-semibold text-blue-700">Company:</span>
+              <div className="relative">
+                <select
+                  defaultValue="vchemics"
+                  className="appearance-none rounded-lg border border-[#E2E8F0] bg-[#FFFFFF] pl-3 pr-7 py-1.5 text-[12px] font-semibold text-[#1E3A5F] focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-xs cursor-pointer"
+                  onChange={(e) => {
+                    if (e.target.value === 'rpc') {
+                      alert('RPC Solutions company module will be enabled in multi-company release.');
+                      e.target.value = 'vchemics';
+                    }
+                  }}
+                >
+                  <option value="vchemics">VChemics India Solutions</option>
+                  <option value="rpc">RPC Solutions (Multi-Company)</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-500" />
+              </div>
             </div>
 
             {/* FY Dropdown (Read-Only) */}

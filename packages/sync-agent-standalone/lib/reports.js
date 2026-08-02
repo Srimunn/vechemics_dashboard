@@ -8,8 +8,8 @@ function buildJobs(config) {
   const from = config.FY_START;
   const to = config.TO_DATE;
   return [
-    { name: 'balance-sheet', jobType: 'balance-sheet', xml: t.balanceSheet(co, from, to), parse: (x) => p.parseBalanceSheet(x) },
-    { name: 'profit-and-loss', jobType: 'profit-and-loss', xml: t.profitAndLoss(co, from, to), parse: (x) => p.parseProfitAndLoss(x) },
+    { name: 'balance-sheet', jobType: 'balance-sheet', xml: t.balanceSheet(co, from, to), parse: (parsed, raw) => p.parseBalanceSheet(parsed, raw) },
+    { name: 'profit-and-loss', jobType: 'profit-and-loss', xml: t.profitAndLoss(co, from, to), parse: (parsed, raw) => p.parseProfitAndLoss(parsed, raw) },
     { name: 'trial-balance', jobType: 'ledger-list', xml: t.trialBalance(co, from, to), parse: (x) => p.parseTrialBalance(x) },
     { name: 'stock-summary', jobType: 'stock-summary', xml: t.stockSummary(co, from, to), parse: (x) => p.parseStockItems(x) },
     { name: 'day-book', jobType: 'day-book', xml: t.dayBook(co, from, to), parse: (x) => p.parseVouchers(x) },

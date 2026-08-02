@@ -58,4 +58,26 @@ async function postSyncLog(log) {
   }
 }
 
-module.exports = { push, postSyncLog };
+/** Call refresh-kpi endpoint to compute Bank/Cash/GST from ledger entries. */
+async function triggerRefreshKpi() {
+  try {
+    const c = client();
+    await postWithBackoff(c, '/api/sync/refresh-kpi', {});
+  } catch (err) {
+    logger.warn({ err: err && err.message }, 'Failed to trigger refresh-kpi');
+  }
+}
+
+/** Fetch existing KPI snapshot to preserve Bank/Cash/GST values. */
+async function fetchKpiSnapshot() {
+  try {
+    const c = client();
+    const res = await c.get('/api/sync/kpi-snapshot');
+    return res.data && res.data.snapshot ? res.data.snapshot : null;
+  } catch (err) {
+    logger.warn({ err: err && err.message }, 'Failed to fetch existing KPI snapshot');
+    return null;
+  }
+}
+
+module.exports = { push, postSyncLog, triggerRefreshKpi, fetchKpiSnapshot };

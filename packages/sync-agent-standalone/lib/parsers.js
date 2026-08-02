@@ -250,7 +250,33 @@ function parseStockItems(parsed) {
   return out;
 }
 
-function parseBalanceSheet(parsed) {
+function parseBalanceSheet(parsed, rawXml) {
+  if (rawXml) {
+    const blocks = rawXml.split('<DSPDISPNAME>');
+    const out = [];
+    for (let i = 1; i < blocks.length; i++) {
+      const block = blocks[i];
+      const nameEnd = block.indexOf('</DSPDISPNAME>');
+      if (nameEnd === -1) continue;
+      const name = block.substring(0, nameEnd).trim();
+      if (!name) continue;
+
+      let valStr = '';
+      const mainMatch = block.match(/<BSMAINAMT>([^<]+)<\/BSMAINAMT>/);
+      if (mainMatch) {
+        valStr = mainMatch[1].trim();
+      } else {
+        const subMatch = block.match(/<BSSUBAMT>([^<]+)<\/BSSUBAMT>/);
+        if (subMatch) {
+          valStr = subMatch[1].trim();
+        }
+      }
+      if (!valStr) continue;
+      const bal = amount(valStr);
+      out.push({ name, parentGroup: 'Balance Sheet', openingBalance: 0, currentBalance: bal, isDebit: bal >= 0 });
+    }
+    return out;
+  }
   const names = deepCollect(parsed, 'BSNAME');
   const amts = deepCollect(parsed, 'BSAMT');
   const out = [];
@@ -265,7 +291,33 @@ function parseBalanceSheet(parsed) {
   return out;
 }
 
-function parseProfitAndLoss(parsed) {
+function parseProfitAndLoss(parsed, rawXml) {
+  if (rawXml) {
+    const blocks = rawXml.split('<DSPDISPNAME>');
+    const out = [];
+    for (let i = 1; i < blocks.length; i++) {
+      const block = blocks[i];
+      const nameEnd = block.indexOf('</DSPDISPNAME>');
+      if (nameEnd === -1) continue;
+      const name = block.substring(0, nameEnd).trim();
+      if (!name) continue;
+
+      let valStr = '';
+      const mainMatch = block.match(/<BSMAINAMT>([^<]+)<\/BSMAINAMT>/);
+      if (mainMatch) {
+        valStr = mainMatch[1].trim();
+      } else {
+        const subMatch = block.match(/<PLSUBAMT>([^<]+)<\/PLSUBAMT>/);
+        if (subMatch) {
+          valStr = subMatch[1].trim();
+        }
+      }
+      if (!valStr) continue;
+      const bal = amount(valStr);
+      out.push({ name, parentGroup: 'Profit & Loss', openingBalance: 0, currentBalance: bal, isDebit: bal >= 0 });
+    }
+    return out;
+  }
   const names = deepCollect(parsed, 'DSPACCNAME');
   const amts = deepCollect(parsed, 'PLAMT');
   const out = [];
@@ -337,6 +389,7 @@ function extractKpiDirect({
   payables = [],
   ledgers = [],
   vouchersToday = [],
+  existingSnapshot = null,
 }) {
   const plByName = (nameRe) => {
     const row = pnlRows.find((r) => nameRe.test(r.name));
@@ -365,14 +418,20 @@ function extractKpiDirect({
       .reduce((s, l) => s + Math.abs(l.currentBalance || 0), 0);
   };
 
-  const bankBalance = findSumLedgerBal(/bank/i);
-  const cashInHand = findSumLedgerBal(/cash.?in.?hand|^cash$/i);
+  let bankBalance = findSumLedgerBal(/bank/i);
+  let cashInHand = findSumLedgerBal(/cash.?in.?hand|^cash$/i);
   
   const gstOutput = ledgers.filter((l) => /output/i.test(l.name)).reduce((s, l) => s + Math.abs(l.currentBalance || 0), 0);
   const gstInput = ledgers.filter((l) => /input/i.test(l.name)).reduce((s, l) => s + Math.abs(l.currentBalance || 0), 0);
   let gstPayable = gstOutput - gstInput;
   if (gstPayable <= 0) {
     gstPayable = findSumLedgerBal(/duties.*tax|gst/i);
+  }
+
+  if (existingSnapshot) {
+    if (bankBalance === 0 && existingSnapshot.bankBalance) bankBalance = Number(existingSnapshot.bankBalance);
+    if (cashInHand === 0 && existingSnapshot.cashInHand) cashInHand = Number(existingSnapshot.cashInHand);
+    if (gstPayable === 0 && existingSnapshot.gstPayable) gstPayable = Number(existingSnapshot.gstPayable);
   }
 
   if (outstandingReceivables === 0) {

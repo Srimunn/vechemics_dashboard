@@ -598,7 +598,15 @@ syncRouter.post('/recalculate-costs', requireUser, async (_req: Request, res: Re
 // POST /api/sync/refresh-kpi  (delete today's snapshot and recompute)
 // ---------------------------------------------------------------------------
 
-syncRouter.post('/refresh-kpi', requireUser, async (_req: Request, res: Response) => {
+function syncOrUserAuth(req: Request, res: Response, next: any): void {
+  const syncToken = req.get('x-sync-token');
+  if (syncToken) {
+    return syncAuth(req, res, next);
+  }
+  return requireUser(req, res, next);
+}
+
+syncRouter.post('/refresh-kpi', syncOrUserAuth, async (_req: Request, res: Response) => {
   try {
     const companyId = await ensureCompanyId();
     const today = new Date();
@@ -613,5 +621,22 @@ syncRouter.post('/refresh-kpi', requireUser, async (_req: Request, res: Response
     res.json({ ok: true, message: 'KPI snapshot refreshed and notifications generated' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to refresh KPI', detail: String(err) });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/sync/kpi-snapshot  (fetch latest KPI snapshot for agent)
+// ---------------------------------------------------------------------------
+
+syncRouter.get('/kpi-snapshot', syncAuth, async (_req: Request, res: Response) => {
+  try {
+    const companyId = await ensureCompanyId();
+    const snapshot = await prisma.kpiSnapshot.findFirst({
+      where: { companyId },
+      orderBy: { snapshotDate: 'desc' },
+    });
+    res.json({ snapshot });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch KPI snapshot', detail: String(err) });
   }
 });

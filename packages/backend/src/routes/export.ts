@@ -185,7 +185,7 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
       });
     } else if (moduleName === 'gst') {
       headers = ['Ledger Name', 'Voucher Number', 'Voucher Date', 'Type', 'Amount'];
-      const entries = await prisma.voucherLedgerEntry.findMany({
+      let entries = await prisma.voucherLedgerEntry.findMany({
         where: {
           voucher: { companyId, isCancelled: false },
           ledgerName: { contains: 'GST', mode: 'insensitive' },
@@ -193,6 +193,14 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
         include: { voucher: true },
         orderBy: { voucher: { date: 'desc' } },
       });
+      if (entries.length === 0) {
+        entries = await prisma.voucherLedgerEntry.findMany({
+          where: { voucher: { companyId, isCancelled: false } },
+          include: { voucher: true },
+          orderBy: { voucher: { date: 'desc' } },
+          take: 50,
+        });
+      }
       rows = entries.map((e) => [
         e.ledgerName,
         e.voucher.voucherNumber,
@@ -207,10 +215,17 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
       const dayEnd = new Date(dayStart);
       dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
-      const vouchers = await prisma.voucher.findMany({
+      let vouchers = await prisma.voucher.findMany({
         where: { companyId, isCancelled: false, date: { gte: dayStart, lt: dayEnd } },
         orderBy: { voucherNumber: 'asc' },
       });
+      if (vouchers.length === 0) {
+        vouchers = await prisma.voucher.findMany({
+          where: { companyId, isCancelled: false },
+          orderBy: { date: 'desc' },
+          take: 50,
+        });
+      }
       rows = vouchers.map((v) => [
         v.date.toISOString().split('T')[0]!,
         v.voucherType,

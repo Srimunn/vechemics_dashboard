@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { ReceiptText, RefreshCw, IndianRupee } from 'lucide-react';
 import { ExportButton } from '@/components/ui/ExportButton';
+import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 
 function formatINR(val: number): string {
@@ -10,6 +11,15 @@ function formatINR(val: number): string {
 }
 
 export default function GstPage() {
+  const getStartOfMonth = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  };
+  const getTodayStr = () => new Date().toISOString().split('T')[0]!;
+
+  const [fromDate, setFromDate] = useState(getStartOfMonth());
+  const [toDate, setToDate] = useState(getTodayStr());
+
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -21,7 +31,7 @@ export default function GstPage() {
       const headers: Record<string, string> = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch(`${backendUrl}/api/analytics/gst`, { headers });
+      const res = await fetch(`${backendUrl}/api/analytics/gst?from=${fromDate}&to=${toDate}`, { headers });
       if (res.ok) {
         const json = await res.json();
         setData(json);
@@ -35,7 +45,7 @@ export default function GstPage() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fromDate, toDate]);
 
   return (
     <div className="space-y-6">
@@ -52,9 +62,11 @@ export default function GstPage() {
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
-          <ExportButton moduleName="gst" label="Export Excel" />
+          <ExportButton moduleName="gst" label="Export" fromDate={fromDate} toDate={toDate} />
         </div>
       </div>
+
+      <DateRangePicker initialFrom={fromDate} initialTo={toDate} onApply={(from, to) => { setFromDate(from); setToDate(to); }} />
 
       {data?.summary && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

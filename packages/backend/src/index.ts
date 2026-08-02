@@ -14,6 +14,7 @@ import { exportRouter } from './routes/export.js';
 import { reportsRouter } from './routes/reports.js';
 import { auditRouter } from './routes/audit.js';
 import { notificationsRouter } from './routes/notifications.js';
+import { searchRouter } from './routes/search.js';
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use('/api/export', exportRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/audit', auditRouter);
 app.use('/api/notifications', notificationsRouter);
+app.use('/api/search', searchRouter);
 
 async function bootstrap(): Promise<void> {
   // First-boot convenience: create the CEO login if the DB has no users yet.

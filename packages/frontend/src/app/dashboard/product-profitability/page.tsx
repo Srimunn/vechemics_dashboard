@@ -3,14 +3,22 @@
 import { useState, useEffect } from 'react';
 import { TrendingUp, RefreshCw, Calendar, Package, Search, AlertCircle } from 'lucide-react';
 import { ExportButton } from '@/components/ui/ExportButton';
+import { DateRangePicker } from '@/components/ui/DateRangePicker';
 
 function formatINR(val: number): string {
   return '₹' + new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(val);
 }
 
 export default function ProductProfitabilityPage() {
-  const [fromDate, setFromDate] = useState('2026-04-01');
-  const [toDate, setToDate] = useState(new Date().toISOString().split('T')[0]!);
+  const getStartOfMonth = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  };
+  const getTodayStr = () => new Date().toISOString().split('T')[0]!;
+
+  const [fromDate, setFromDate] = useState(getStartOfMonth());
+  const [toDate, setToDate] = useState(getTodayStr());
+
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,10 +33,7 @@ export default function ProductProfitabilityPage() {
       const headers: Record<string, string> = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const fromParam = fromDate.replace(/-/g, '');
-      const toParam = toDate.replace(/-/g, '');
-
-      const res = await fetch(`${backendUrl}/api/analytics/product-profitability?from=${fromParam}&to=${toParam}`, { headers });
+      const res = await fetch(`${backendUrl}/api/analytics/product-profitability?from=${fromDate}&to=${toDate}`, { headers });
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       const json = await res.json();
       setData(json);
@@ -84,13 +89,6 @@ export default function ProductProfitabilityPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs">
-            <Calendar className="h-4 w-4 text-gray-400" />
-            <span className="text-gray-500 font-medium">From:</span>
-            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="focus:outline-none" />
-            <span className="text-gray-500 font-medium ml-1">To:</span>
-            <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="focus:outline-none" />
-          </div>
           <button
             onClick={fetchData}
             className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm"
@@ -98,14 +96,12 @@ export default function ProductProfitabilityPage() {
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
-          <ExportButton moduleName="product-profitability" label="Export Excel" />
+          <ExportButton moduleName="product-profitability" label="Export" fromDate={fromDate} toDate={toDate} />
         </div>
       </div>
 
-      {/* Date Filter Label Banner */}
-      <div className="rounded-lg bg-blue-50/70 px-4 py-2 text-xs font-semibold text-blue-800 border border-blue-200">
-        Showing data from <span className="underline">{fromDate}</span> to <span className="underline">{toDate}</span>
-      </div>
+      {/* Date Range Bar */}
+      <DateRangePicker initialFrom={fromDate} initialTo={toDate} onApply={(from, to) => { setFromDate(from); setToDate(to); }} />
 
       {/* Summary KPI Cards */}
       {data?.summary && (

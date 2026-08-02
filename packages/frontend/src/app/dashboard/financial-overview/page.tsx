@@ -1,14 +1,24 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Wallet, RefreshCw, IndianRupee, ArrowDownToLine, ArrowUpFromLine, Package, ReceiptText, Building, CheckCircle2 } from 'lucide-react';
+import { Wallet, RefreshCw, IndianRupee, ArrowDownToLine, ArrowUpFromLine, Package, ReceiptText, Building } from 'lucide-react';
 import { ExportButton } from '@/components/ui/ExportButton';
+import { DateRangePicker } from '@/components/ui/DateRangePicker';
 
 function formatINR(val: number): string {
   return '₹' + new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(val);
 }
 
 export default function FinancialOverviewPage() {
+  const getStartOfMonth = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  };
+  const getTodayStr = () => new Date().toISOString().split('T')[0]!;
+
+  const [fromDate, setFromDate] = useState(getStartOfMonth());
+  const [toDate, setToDate] = useState(getTodayStr());
+
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -20,7 +30,7 @@ export default function FinancialOverviewPage() {
       const headers: Record<string, string> = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch(`${backendUrl}/api/analytics/financial-overview`, { headers });
+      const res = await fetch(`${backendUrl}/api/analytics/financial-overview?from=${fromDate}&to=${toDate}`, { headers });
       if (res.ok) {
         const json = await res.json();
         setData(json);
@@ -34,7 +44,7 @@ export default function FinancialOverviewPage() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fromDate, toDate]);
 
   return (
     <div className="space-y-6">
@@ -51,9 +61,11 @@ export default function FinancialOverviewPage() {
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
-          <ExportButton moduleName="financial-overview" label="Export Excel" />
+          <ExportButton moduleName="financial-overview" label="Export" fromDate={fromDate} toDate={toDate} />
         </div>
       </div>
+
+      <DateRangePicker initialFrom={fromDate} initialTo={toDate} onApply={(from, to) => { setFromDate(from); setToDate(to); }} />
 
       {data && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

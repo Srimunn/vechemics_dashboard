@@ -65,7 +65,7 @@ export default function DailyReportPage() {
             <Printer className="h-4 w-4" />
             Print
           </button>
-          <ExportButton moduleName="daily-report" label="Export Excel" />
+          <ExportButton moduleName="daily-report" label="Export" fromDate={selectedDate} toDate={selectedDate} />
         </div>
       </div>
 

@@ -26,11 +26,34 @@ function arrayToCsv(headers: string[], rows: (string | number)[][]): string {
   return [headerLine, ...dataLines].join('\r\n');
 }
 
+function parseDateParam(val: unknown, defaultDate: Date): Date {
+  if (!val) return defaultDate;
+  const str = String(val).trim();
+  const m = /^(\d{4})(\d{2})(\d{2})$/.exec(str);
+  if (m) {
+    return new Date(Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!));
+  }
+  const m2 = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+  if (m2) {
+    return new Date(Date.UTC(+m2[1]!, +m2[2]! - 1, +m2[3]!));
+  }
+  const d = new Date(str);
+  return Number.isNaN(d.getTime()) ? defaultDate : d;
+}
+
+function formatDateDisplay(d: Date): string {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  const mon = months[d.getUTCMonth()];
+  const yr = d.getUTCFullYear();
+  return `${day}-${mon}-${yr}`;
+}
+
 /** Build native Microsoft Excel (.xlsx) buffer using exceljs */
 async function buildExcelWorkbook(
   title: string,
   companyName: string,
-  dateStr: string,
+  periodStr: string,
   headers: string[],
   rows: (string | number)[][],
   currencyColIndices: number[] = [],
@@ -44,8 +67,8 @@ async function buildExcelWorkbook(
   companyRow.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FF1E3A5F' } };
   worksheet.mergeCells(1, 1, 1, Math.max(headers.length, 4));
 
-  // Header Row 2: Report Title & Date
-  const titleRow = worksheet.addRow([`${title} — Generated: ${dateStr}`]);
+  // Header Row 2: Report Title & Period
+  const titleRow = worksheet.addRow([`${title} — ${periodStr}`]);
   titleRow.font = { name: 'Calibri', size: 11, italic: true, color: { argb: 'FF475569' } };
   worksheet.mergeCells(2, 1, 2, Math.max(headers.length, 4));
 
@@ -96,11 +119,11 @@ async function buildExcelWorkbook(
   return Buffer.from(buffer);
 }
 
-/** Build printable PDF document buffer using pdfkit */
+/** Build printable PDF document buffer using pdfkit (strict height check, zero empty pages) */
 function buildPdfDocument(
   title: string,
   companyName: string,
-  dateStr: string,
+  periodStr: string,
   headers: string[],
   rows: (string | number)[][],
 ): Promise<Buffer> {
@@ -110,6 +133,7 @@ function buildPdfDocument(
       layout: 'landscape',
       margin: 30,
       bufferPages: true,
+      autoFirstPage: true,
     });
 
     const buffers: Buffer[] = [];
@@ -133,7 +157,7 @@ function buildPdfDocument(
     doc
       .fontSize(9)
       .fillColor('#64748B')
-      .text(`Report Date: ${dateStr}`, { align: 'center' })
+      .text(periodStr, { align: 'center' })
       .moveDown(0.8);
 
     // Table settings
@@ -144,41 +168,44 @@ function buildPdfDocument(
     let startX = doc.page.margins.left;
     let startY = doc.y;
 
-    // Header Background
-    doc.rect(startX, startY, pageWidth, 20).fill('#1E3A5F');
-    doc.fillColor('#FFFFFF').fontSize(8);
-
-    headers.forEach((h, i) => {
-      doc.text(h, startX + i * colWidth + 2, startY + 5, {
-        width: colWidth - 4,
-        align: i === 0 ? 'left' : 'center',
+    const renderHeader = (yPos: number) => {
+      doc.rect(startX, yPos, pageWidth, 20).fill('#1E3A5F');
+      doc.fillColor('#FFFFFF').fontSize(8);
+      headers.forEach((h, i) => {
+        doc.text(h, startX + i * colWidth + 2, yPos + 5, {
+          width: colWidth - 4,
+          align: i === 0 ? 'left' : 'center',
+          lineBreak: false,
+        });
       });
-    });
+    };
 
+    renderHeader(startY);
     startY += 20;
 
     // Data Rows
     doc.fillColor('#1E293B').fontSize(7.5);
+
     rows.forEach((row, rowIdx) => {
-      if (startY > doc.page.height - doc.page.margins.bottom - 40) {
+      // Calculate row height based on contents
+      let rowHeight = 16;
+      row.forEach((val) => {
+        const textStr = val === null || val === undefined ? '' : String(val);
+        const h = doc.heightOfString(textStr, { width: colWidth - 4 });
+        if (h + 6 > rowHeight) rowHeight = Math.ceil(h + 6);
+      });
+
+      // Strict overflow check before rendering row
+      if (startY + rowHeight > doc.page.height - doc.page.margins.bottom - 20) {
         doc.addPage({ size: 'A4', layout: 'landscape', margin: 30 });
         startY = doc.page.margins.top;
-
-        // Repeat Header
-        doc.rect(startX, startY, pageWidth, 20).fill('#1E3A5F');
-        doc.fillColor('#FFFFFF').fontSize(8);
-        headers.forEach((h, i) => {
-          doc.text(h, startX + i * colWidth + 2, startY + 5, {
-            width: colWidth - 4,
-            align: i === 0 ? 'left' : 'center',
-          });
-        });
+        renderHeader(startY);
         startY += 20;
         doc.fillColor('#1E293B').fontSize(7.5);
       }
 
       if (rowIdx % 2 === 1) {
-        doc.rect(startX, startY, pageWidth, 16).fill('#F8FAFC');
+        doc.rect(startX, startY, pageWidth, rowHeight).fill('#F8FAFC');
         doc.fillColor('#1E293B');
       }
 
@@ -191,20 +218,20 @@ function buildPdfDocument(
         });
       });
 
-      doc.moveTo(startX, startY + 16).lineTo(startX + pageWidth, startY + 16).strokeColor('#E2E8F0').stroke();
-      startY += 16;
+      doc.moveTo(startX, startY + rowHeight).lineTo(startX + pageWidth, startY + rowHeight).strokeColor('#E2E8F0').stroke();
+      startY += rowHeight;
     });
 
-    // Page Numbers and Footer
+    // Page Numbers and Footer (rendered strictly over populated pages)
     const pages = doc.bufferedPageRange();
-    for (let i = 0; i < pages.count; i++) {
+    for (let i = pages.start; i < pages.start + pages.count; i++) {
       doc.switchToPage(i);
       const footerY = doc.page.height - 25;
       doc
         .fontSize(8)
         .fillColor('#94A3B8')
-        .text('Generated from VChemics CEO Dashboard', doc.page.margins.left, footerY, { align: 'left' })
-        .text(`Page ${i + 1} of ${pages.count}`, doc.page.margins.left, footerY, { align: 'right' });
+        .text('Generated from VChemics CEO Dashboard', doc.page.margins.left, footerY, { align: 'left', lineBreak: false })
+        .text(`Page ${i + 1} of ${pages.count}`, doc.page.margins.left, footerY, { align: 'right', lineBreak: false });
     }
 
     doc.end();
@@ -212,7 +239,7 @@ function buildPdfDocument(
 }
 
 /**
- * GET /api/export/:module?format=xlsx|pdf|csv
+ * GET /api/export/:module?format=xlsx|pdf|csv&from=YYYYMMDD&to=YYYYMMDD
  * Downloads Excel (.xlsx), PDF (.pdf), or CSV report for any dashboard module.
  */
 exportRouter.get('/:module', requireUser, async (req: Request, res: Response) => {
@@ -225,6 +252,15 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
     const format = String(req.query.format || 'xlsx').toLowerCase();
     const dateStr = new Date().toISOString().split('T')[0]!;
 
+    const defaultFrom = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
+    const defaultTo = new Date();
+
+    const fromDate = parseDateParam(req.query.from, defaultFrom);
+    const toDate = parseDateParam(req.query.to, defaultTo);
+    toDate.setUTCHours(23, 59, 59, 999);
+
+    const periodStr = `Report Period: ${formatDateDisplay(fromDate)} to ${formatDateDisplay(toDate)}`;
+
     let reportTitle = moduleName.toUpperCase().replace(/-/g, ' ');
     let headers: string[] = [];
     let rows: (string | number)[][] = [];
@@ -236,7 +272,12 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
       currencyColIndices = [6, 7, 8, 9, 10];
 
       const sales = await prisma.voucher.findMany({
-        where: { companyId, voucherType: 'Sales', isCancelled: false },
+        where: {
+          companyId,
+          voucherType: 'Sales',
+          isCancelled: false,
+          date: { gte: fromDate, lte: toDate },
+        },
         include: { items: true },
         orderBy: { date: 'desc' },
       });
@@ -281,7 +322,7 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
       stockItems.forEach((s) => stockCostMap.set(s.name.toLowerCase().trim(), num(s.avgCost)));
 
       const items = await prisma.voucherItem.findMany({
-        where: { voucher: { companyId, voucherType: 'Sales', isCancelled: false } },
+        where: { voucher: { companyId, voucherType: 'Sales', isCancelled: false, date: { gte: fromDate, lte: toDate } } },
       });
 
       const productMap: Record<string, any> = {};
@@ -317,12 +358,12 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
         ];
       });
     } else if (moduleName === 'sales' || moduleName === 'sales-analytics') {
-      reportTitle = 'Sales Analytics Report';
+      reportTitle = 'Sales Analytics Register';
       headers = ['Date', 'Voucher Number', 'Customer Name', 'Amount'];
       currencyColIndices = [3];
 
       const items = await prisma.voucher.findMany({
-        where: { companyId, voucherType: 'Sales', isCancelled: false },
+        where: { companyId, voucherType: 'Sales', isCancelled: false, date: { gte: fromDate, lte: toDate } },
         orderBy: { date: 'desc' },
       });
       rows = items.map((i) => [
@@ -332,12 +373,12 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
         num(i.amount),
       ]);
     } else if (moduleName === 'purchases' || moduleName === 'purchase-analytics') {
-      reportTitle = 'Purchase Analytics Report';
+      reportTitle = 'Purchase Analytics Register';
       headers = ['Date', 'Voucher Number', 'Supplier Name', 'Amount'];
       currencyColIndices = [3];
 
       const items = await prisma.voucher.findMany({
-        where: { companyId, voucherType: 'Purchase', isCancelled: false },
+        where: { companyId, voucherType: 'Purchase', isCancelled: false, date: { gte: fromDate, lte: toDate } },
         orderBy: { date: 'desc' },
       });
       rows = items.map((i) => [
@@ -412,7 +453,7 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
       currencyColIndices = [3, 4];
 
       const salesVouchers = await prisma.voucher.findMany({
-        where: { companyId, voucherType: 'Sales', isCancelled: false },
+        where: { companyId, voucherType: 'Sales', isCancelled: false, date: { gte: fromDate, lte: toDate } },
       });
       const customerSalesMap = new Map<string, number>();
       salesVouchers.forEach((v) => {
@@ -445,7 +486,7 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
       currencyColIndices = [3, 4];
 
       const purchaseVouchers = await prisma.voucher.findMany({
-        where: { companyId, voucherType: 'Purchase', isCancelled: false },
+        where: { companyId, voucherType: 'Purchase', isCancelled: false, date: { gte: fromDate, lte: toDate } },
       });
       const supplierSpendMap = new Map<string, number>();
       purchaseVouchers.forEach((v) => {
@@ -479,7 +520,7 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
 
       let entries = await prisma.voucherLedgerEntry.findMany({
         where: {
-          voucher: { companyId, isCancelled: false },
+          voucher: { companyId, isCancelled: false, date: { gte: fromDate, lte: toDate } },
           ledgerName: { contains: 'GST', mode: 'insensitive' },
         },
         include: { voucher: true },
@@ -487,7 +528,7 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
       });
       if (entries.length === 0) {
         entries = await prisma.voucherLedgerEntry.findMany({
-          where: { voucher: { companyId, isCancelled: false } },
+          where: { voucher: { companyId, isCancelled: false, date: { gte: fromDate, lte: toDate } } },
           include: { voucher: true },
           orderBy: { voucher: { date: 'desc' } },
           take: 50,
@@ -505,13 +546,8 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
       headers = ['Date', 'Voucher Type', 'Voucher Number', 'Party Name', 'Amount'];
       currencyColIndices = [4];
 
-      const today = new Date();
-      const dayStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-      const dayEnd = new Date(dayStart);
-      dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
-
       let vouchers = await prisma.voucher.findMany({
-        where: { companyId, isCancelled: false, date: { gte: dayStart, lt: dayEnd } },
+        where: { companyId, isCancelled: false, date: { gte: fromDate, lte: toDate } },
         orderBy: { voucherNumber: 'asc' },
       });
       if (vouchers.length === 0) {
@@ -558,7 +594,7 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
     const safeFilenamePrefix = `VChemics_${moduleName.toUpperCase().replace(/-/g, '_')}_${dateStr}`;
 
     if (format === 'pdf') {
-      const buffer = await buildPdfDocument(reportTitle, companyName, dateStr, headers, rows);
+      const buffer = await buildPdfDocument(reportTitle, companyName, periodStr, headers, rows);
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="${safeFilenamePrefix}.pdf"`);
       res.status(200).send(buffer);
@@ -569,7 +605,7 @@ exportRouter.get('/:module', requireUser, async (req: Request, res: Response) =>
       res.status(200).send(csvContent);
     } else {
       // Default: format=xlsx (Native Excel)
-      const buffer = await buildExcelWorkbook(reportTitle, companyName, dateStr, headers, rows, currencyColIndices);
+      const buffer = await buildExcelWorkbook(reportTitle, companyName, periodStr, headers, rows, currencyColIndices);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename="${safeFilenamePrefix}.xlsx"`);
       res.status(200).send(buffer);

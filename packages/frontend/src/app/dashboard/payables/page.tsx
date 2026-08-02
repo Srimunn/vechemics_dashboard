@@ -3,12 +3,22 @@
 import { useState, useEffect } from 'react';
 import { ArrowUpFromLine, RefreshCw, IndianRupee, Search } from 'lucide-react';
 import { ExportButton } from '@/components/ui/ExportButton';
+import { DateRangePicker } from '@/components/ui/DateRangePicker';
 
 function formatINR(val: number): string {
   return '₹' + new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(val);
 }
 
 export default function PayablesPage() {
+  const getStartOfMonth = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  };
+  const getTodayStr = () => new Date().toISOString().split('T')[0]!;
+
+  const [fromDate, setFromDate] = useState(getStartOfMonth());
+  const [toDate, setToDate] = useState(getTodayStr());
+
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -21,7 +31,7 @@ export default function PayablesPage() {
       const headers: Record<string, string> = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch(`${backendUrl}/api/analytics/payables`, { headers });
+      const res = await fetch(`${backendUrl}/api/analytics/payables?from=${fromDate}&to=${toDate}`, { headers });
       if (res.ok) {
         const json = await res.json();
         setData(json);
@@ -35,7 +45,7 @@ export default function PayablesPage() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fromDate, toDate]);
 
   const filteredItems = data?.items?.filter((i: any) =>
     i.partyName.toLowerCase().includes(search.toLowerCase()) ||
@@ -69,9 +79,11 @@ export default function PayablesPage() {
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
-          <ExportButton moduleName="payables" label="Export Excel" />
+          <ExportButton moduleName="payables" label="Export" fromDate={fromDate} toDate={toDate} />
         </div>
       </div>
+
+      <DateRangePicker initialFrom={fromDate} initialTo={toDate} onApply={(from, to) => { setFromDate(from); setToDate(to); }} />
 
       {/* Aging Summary Cards */}
       {data?.aging && (

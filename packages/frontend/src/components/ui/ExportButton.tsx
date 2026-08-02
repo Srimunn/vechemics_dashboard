@@ -7,9 +7,11 @@ interface ExportButtonProps {
   moduleName: string;
   label?: string;
   className?: string;
+  fromDate?: string;
+  toDate?: string;
 }
 
-export function ExportButton({ moduleName, label = 'Export', className = '' }: ExportButtonProps) {
+export function ExportButton({ moduleName, label = 'Export', className = '', fromDate, toDate }: ExportButtonProps) {
   const [open, setOpen] = useState(false);
   const [loadingFormat, setLoadingFormat] = useState<'xlsx' | 'pdf' | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -37,7 +39,11 @@ export function ExportButton({ moduleName, label = 'Export', className = '' }: E
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const res = await fetch(`${backendUrl}/api/export/${moduleName}?format=${format}`, {
+      const params = new URLSearchParams({ format });
+      if (fromDate) params.set('from', fromDate);
+      if (toDate) params.set('to', toDate);
+
+      const res = await fetch(`${backendUrl}/api/export/${moduleName}?${params.toString()}`, {
         method: 'GET',
         headers,
       });

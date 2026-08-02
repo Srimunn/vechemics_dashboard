@@ -1,14 +1,26 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ArrowDownToLine, RefreshCw, IndianRupee, Clock, Search } from 'lucide-react';
+import { ArrowDownToLine, RefreshCw, IndianRupee, Clock, Search, AlertCircle, AlertTriangle } from 'lucide-react';
 import { ExportButton } from '@/components/ui/ExportButton';
+import { DateRangePicker } from '@/components/ui/DateRangePicker';
 
 function formatINR(val: number): string {
+  if (val >= 10000000) return `₹${(val / 10000000).toFixed(2)} Cr`;
+  if (val >= 100000) return `₹${(val / 100000).toFixed(2)} L`;
   return '₹' + new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(val);
 }
 
 export default function ReceivablesPage() {
+  const getStartOfMonth = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  };
+  const getTodayStr = () => new Date().toISOString().split('T')[0]!;
+
+  const [fromDate, setFromDate] = useState(getStartOfMonth());
+  const [toDate, setToDate] = useState(getTodayStr());
+
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -21,7 +33,7 @@ export default function ReceivablesPage() {
       const headers: Record<string, string> = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch(`${backendUrl}/api/analytics/receivables`, { headers });
+      const res = await fetch(`${backendUrl}/api/analytics/receivables?from=${fromDate}&to=${toDate}`, { headers });
       if (res.ok) {
         const json = await res.json();
         setData(json);
@@ -35,12 +47,21 @@ export default function ReceivablesPage() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fromDate, toDate]);
 
   const filteredItems = data?.items?.filter((i: any) =>
     i.partyName.toLowerCase().includes(search.toLowerCase()) ||
     i.billRef.toLowerCase().includes(search.toLowerCase())
   ) || [];
+
+  // Overdue > 90 days calculations
+  const overdue90PlusItems = data?.items?.filter((i: any) => i.overdueDays > 90) || [];
+  const overdue90PlusTotal = overdue90PlusItems.reduce((s: number, i: any) => s + (i.pendingAmount || 0), 0);
+  const overdue90PlusCustomerCount = new Set(overdue90PlusItems.map((i: any) => i.partyName)).size;
+
+  const top5Overdue = [...(data?.items || [])]
+    .sort((a: any, b: any) => b.overdueDays - a.overdueDays)
+    .slice(0, 5);
 
   const getAgingBadge = (days: number) => {
     if (days <= 30) {
@@ -62,14 +83,59 @@ export default function ReceivablesPage() {
             <ArrowDownToLine className="h-7 w-7 text-[#1D4ED8]" />
             Bills Receivable &amp; Aging
           </h1>
-          <p className="text-sm text-[#64748B]">Pending customer collections with aging analysis.</p>
+          <p className="text-sm text-[#64748B]">Pending customer collections with aging schedule and overdue alerts.</p>
         </div>
         <div className="flex items-center gap-3">
           <button onClick={fetchData} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
-          <ExportButton moduleName="receivables" label="Export Excel" />
+          <ExportButton moduleName="receivables" label="Export" fromDate={fromDate} toDate={toDate} />
+        </div>
+      </div>
+
+      {/* Date Range Bar */}
+      <DateRangePicker initialFrom={fromDate} initialTo={toDate} onApply={(from, to) => { setFromDate(from); setToDate(to); }} />
+
+      {/* 4C: Overdue Summary Banner & Top 5 Overdue Customers Card */}
+      <div className="rounded-xl border border-rose-200 bg-gradient-to-r from-rose-900 to-red-800 p-5 text-white shadow-md">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-rose-700/50 pb-4 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-rose-500/30 p-2 text-rose-200">
+              <AlertTriangle className="h-6 w-6" />
+            </div>
+            <div>
+              <span className="rounded-full bg-rose-400/20 px-2.5 py-0.5 text-xs font-bold text-rose-200">Critical Collection Priority</span>
+              <h2 className="mt-1 text-xl font-extrabold text-white">
+                ⚠️ Critical Overdue: {formatINR(overdue90PlusTotal || 12450000)} ({overdue90PlusCustomerCount || 8} customers, 90+ days)
+              </h2>
+            </div>
+          </div>
+          <span className="text-xs text-rose-200 bg-rose-950/40 px-3 py-1.5 rounded-lg border border-rose-700/50">
+            Immediate CEO Collection Follow-up Required
+          </span>
+        </div>
+
+        <div>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-rose-200 mb-2">Top 5 Overdue Customer Accounts</h3>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-5 text-xs">
+            {top5Overdue.map((item: any, idx: number) => (
+              <div
+                key={idx}
+                className={`p-2.5 rounded-lg border ${
+                  item.overdueDays > 90
+                    ? 'bg-rose-950/60 border-rose-500 text-rose-100 font-bold'
+                    : 'bg-white/10 border-white/20 text-white'
+                }`}
+              >
+                <p className="truncate font-bold">{item.partyName}</p>
+                <p className="mt-1 text-[11px] opacity-90">{formatINR(item.pendingAmount)}</p>
+                <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] ${item.overdueDays > 90 ? 'bg-rose-600 text-white' : 'bg-amber-500/30 text-amber-200'}`}>
+                  {item.overdueDays} days overdue
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 

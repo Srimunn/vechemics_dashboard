@@ -6,6 +6,7 @@ import {
   AlertCircle, ArrowUpDown, IndianRupee, Layers, ShoppingBag
 } from 'lucide-react';
 import { ExportButton } from '@/components/ui/ExportButton';
+import { DateRangePicker } from '@/components/ui/DateRangePicker';
 
 interface BillItem {
   id: string;
@@ -53,6 +54,15 @@ function formatINR(val: number): string {
 }
 
 export default function BillPnlPage() {
+  const getStartOfMonth = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  };
+  const getTodayStr = () => new Date().toISOString().split('T')[0]!;
+
+  const [fromDate, setFromDate] = useState(getStartOfMonth());
+  const [toDate, setToDate] = useState(getTodayStr());
+
   const [data, setData] = useState<BillPnlResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +97,8 @@ export default function BillPnlPage() {
         customer: searchCustomer,
         sortBy,
         sortDir,
+        from: fromDate,
+        to: toDate,
         ...(minMargin !== undefined ? { minMargin: String(minMargin) } : {}),
         ...(maxMargin !== undefined ? { maxMargin: String(maxMargin) } : {}),
       });
@@ -101,7 +113,7 @@ export default function BillPnlPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, searchCustomer, marginFilter, sortBy, sortDir]);
+  }, [page, searchCustomer, marginFilter, sortBy, sortDir, fromDate, toDate]);
 
   useEffect(() => {
     fetchBillPnl();
@@ -163,9 +175,12 @@ export default function BillPnlPage() {
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
-          <ExportButton moduleName="bill-pnl" label="Export Excel" />
+          <ExportButton moduleName="bill-pnl" label="Export" fromDate={fromDate} toDate={toDate} />
         </div>
       </div>
+
+      {/* Date Range Bar */}
+      <DateRangePicker initialFrom={fromDate} initialTo={toDate} onApply={(from, to) => { setFromDate(from); setToDate(to); }} />
 
       {/* Summary KPI Cards */}
       {data?.summary && (

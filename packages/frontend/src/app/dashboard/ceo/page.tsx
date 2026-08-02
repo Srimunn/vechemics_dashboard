@@ -43,6 +43,8 @@ const KPI_CONFIGS: KpiConfig[] = [
   { key: 'gstPayable', label: 'GST Payable', semantics: 'positive-bad', href: '/dashboard/gst' },
   { key: 'mtdSales', label: 'Sales Value (MTD)', semantics: 'positive-good', href: '/dashboard/sales-analytics' },
   { key: 'mtdPurchase', label: 'Purchase Value (MTD)', semantics: 'positive-good', href: '/dashboard/purchase-analytics' },
+  { key: 'ordersBilledToday', label: 'Orders Billed Today', semantics: 'positive-good', href: '/dashboard/bill-pnl', accentColor: '#0EA5E9' },
+  { key: 'newCustomersToday', label: 'New Customers This Month', semantics: 'positive-good', href: '/dashboard/customers', accentColor: '#6366F1' },
 ];
 
 function formatINR(val: number): string {
@@ -57,7 +59,7 @@ function CeoSkeleton() {
       <Skeleton className="h-10 w-72" />
       <Skeleton className="h-28 w-full rounded-xl" />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 13 }).map((_, i) => (
+        {Array.from({ length: 15 }).map((_, i) => (
           <Skeleton key={i} className="h-40 rounded-xl" />
         ))}
       </div>
@@ -185,7 +187,7 @@ export default function CeoDashboardPage() {
       {/* Section heading */}
       <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-[20px] font-bold text-[#0F172A] tracking-tight">
-          Business Health Indicators <span className="text-[20px] font-normal text-[#94A3B8]">(13 Key Metrics)</span>
+          Business Health Indicators <span className="text-[20px] font-normal text-[#94A3B8]">(15 Key Metrics)</span>
         </h2>
         <p className="text-[13px] text-[#94A3B8]">Status color coded · Click any KPI card to drill-down into detail module</p>
       </div>
@@ -196,11 +198,13 @@ export default function CeoDashboardPage() {
           const value = today[cfg.key];
           const prev = yesterday ? yesterday[cfg.key] : undefined;
           const delta = prev !== undefined ? computeDelta(value, prev) : undefined;
+          const isCount = cfg.key === 'ordersBilledToday' || cfg.key === 'newCustomersToday';
           return (
             <KpiCard
               key={cfg.key}
               label={cfg.label}
               value={value}
+              format={isCount ? (v) => new Intl.NumberFormat('en-IN').format(v) : undefined}
               delta={delta}
               deltaSemantics={cfg.semantics}
               comparisonLabel="Yesterday"

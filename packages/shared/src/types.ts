@@ -156,7 +156,9 @@ export type KpiKey =
   | 'inventoryValue'
   | 'gstPayable'
   | 'mtdSales'
-  | 'mtdPurchase';
+  | 'mtdPurchase'
+  | 'ordersBilledToday'
+  | 'newCustomersToday';
 
 // ---------------------------------------------------------------------------
 // Sync wire protocol (sync agent -> backend /api/sync/ingest)

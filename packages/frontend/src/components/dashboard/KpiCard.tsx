@@ -84,7 +84,7 @@ export function KpiCard({
         {/* Yesterday comparison */}
         {comparisonLabel && comparisonValue !== undefined && (
           <p className="text-[13px] text-[#94A3B8]">
-            {comparisonLabel}: <span className="font-medium text-[#64748B] tabular">{formatCurrency(comparisonValue)}</span>
+            {comparisonLabel}: <span className="font-medium text-[#64748B] tabular">{format(comparisonValue)}</span>
           </p>
         )}
       </div>

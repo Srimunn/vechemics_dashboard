@@ -30,6 +30,7 @@ model Company {
   outstandings  Outstanding[]
   kpiSnapshots  KpiSnapshot[]
   notifications Notification[]
+  ledgerBalances LedgerBalance[]
 }
 
 model Voucher {
@@ -198,4 +199,17 @@ model Notification {
 
   @@index([companyId, isRead])
   @@index([createdAt])
+}
+
+model LedgerBalance {
+  id             String   @id @default(cuid())
+  companyId      String
+  company        Company  @relation(fields: [companyId], references: [id])
+  name           String
+  parentGroup    String
+  closingBalance Decimal  @db.Decimal(18, 2)
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  @@unique([companyId, name])
+  @@index([parentGroup])
 }

@@ -41,7 +41,8 @@ export type SyncJobType =
   | 'bills-payable'
   | 'balance-sheet'
   | 'profit-and-loss'
-  | 'kpi-direct';
+  | 'kpi-direct'
+  | 'ledger-balances';
 
 // ---------------------------------------------------------------------------
 // Normalized domain shapes (produced by the sync agent, stored by the backend).
@@ -187,7 +188,17 @@ export type SyncJobPayload =
   | { syncId: string; jobType: 'stock-summary'; data: StockItem[] }
   | { syncId: string; jobType: 'bills-receivable'; data: Outstanding[] }
   | { syncId: string; jobType: 'bills-payable'; data: Outstanding[] }
-  | { syncId: string; jobType: 'kpi-direct'; data: Partial<KpiSnapshot> | Partial<KpiSnapshot>[] };
+  | { syncId: string; jobType: 'kpi-direct'; data: Partial<KpiSnapshot> | Partial<KpiSnapshot>[] }
+  | {
+      syncId: string;
+      jobType: 'ledger-balances';
+      data: {
+        bankBalance: number;
+        cashInHand: number;
+        gstPayable: number;
+        ledgers?: { name: string; parentGroup: string; closingBalance: number }[];
+      };
+    };
 
 export interface SyncLog {
   startedAt: string;

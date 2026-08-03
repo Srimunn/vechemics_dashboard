@@ -115,6 +115,7 @@ const ingestSchema = z.object({
     'bills-receivable',
     'bills-payable',
     'kpi-direct',
+    'ledger-balances',
   ]),
   data: z.union([z.array(z.unknown()), z.record(z.unknown())]),
 });
@@ -404,6 +405,78 @@ async function ingestKpiDirect(companyId: string, data: unknown): Promise<number
   return 1;
 }
 
+const ledgerBalanceItemSchema = z.object({
+  name: z.string().min(1),
+  parentGroup: z.string().default('Unknown'),
+  closingBalance: optionalCoercedNumber.transform((v) => v ?? 0),
+});
+
+const ledgerBalancesSchema = z.object({
+  bankBalance: optionalCoercedNumber.transform((v) => v ?? 0),
+  cashInHand: optionalCoercedNumber.transform((v) => v ?? 0),
+  gstPayable: optionalCoercedNumber.transform((v) => v ?? 0),
+  ledgers: z.array(ledgerBalanceItemSchema).optional().default([]),
+});
+
+async function ingestLedgerBalances(companyId: string, data: unknown): Promise<number> {
+  const rawObj = Array.isArray(data) ? data[0] : data;
+  const parsed = ledgerBalancesSchema.parse(rawObj ?? {});
+
+  if (parsed.ledgers && parsed.ledgers.length > 0) {
+    const chunkSize = 100;
+    for (let i = 0; i < parsed.ledgers.length; i += chunkSize) {
+      const chunk = parsed.ledgers.slice(i, i + chunkSize);
+      await prisma.$transaction(
+        chunk.map((l) =>
+          prisma.ledgerBalance.upsert({
+            where: { companyId_name: { companyId, name: l.name } },
+            update: {
+              parentGroup: l.parentGroup,
+              closingBalance: l.closingBalance,
+            },
+            create: {
+              companyId,
+              name: l.name,
+              parentGroup: l.parentGroup,
+              closingBalance: l.closingBalance,
+            },
+          }),
+        ),
+      );
+    }
+  }
+
+  const today = new Date();
+  const dayStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+
+  const existing = await prisma.kpiSnapshot.findUnique({
+    where: { companyId_snapshotDate: { companyId, snapshotDate: dayStart } },
+  });
+
+  if (existing) {
+    await prisma.kpiSnapshot.update({
+      where: { id: existing.id },
+      data: {
+        bankBalance: parsed.bankBalance,
+        cashInHand: parsed.cashInHand,
+        gstPayable: parsed.gstPayable,
+      },
+    });
+  } else {
+    await recomputeTodaySnapshot(companyId);
+    await prisma.kpiSnapshot.updateMany({
+      where: { companyId, snapshotDate: dayStart },
+      data: {
+        bankBalance: parsed.bankBalance,
+        cashInHand: parsed.cashInHand,
+        gstPayable: parsed.gstPayable,
+      },
+    });
+  }
+
+  return parsed.ledgers?.length || 1;
+}
+
 // ---------------------------------------------------------------------------
 // POST /api/sync/ingest
 // ---------------------------------------------------------------------------
@@ -422,7 +495,9 @@ syncRouter.post('/ingest', syncAuth, async (req: Request, res: Response) => {
     let ingested = 0;
     const items = Array.isArray(data) ? data : [data];
 
-    if (jobType === 'kpi-direct') {
+    if (jobType === 'ledger-balances') {
+      ingested = await ingestLedgerBalances(companyId, data);
+    } else if (jobType === 'kpi-direct') {
       ingested = await ingestKpiDirect(companyId, data);
     } else if (jobType === 'ledger-list' || jobType === 'balance-sheet' || jobType === 'profit-and-loss') {
       ingested = await ingestLedgers(companyId, items, jobType);
@@ -436,7 +511,7 @@ syncRouter.post('/ingest', syncAuth, async (req: Request, res: Response) => {
       ingested = await ingestOutstandings(companyId, items, 'payable');
     }
 
-    if (jobType !== 'kpi-direct') {
+    if (jobType !== 'kpi-direct' && jobType !== 'ledger-balances') {
       // Refresh today's KPI snapshot so the dashboard reflects the new data.
       await recomputeTodaySnapshot(companyId);
     }

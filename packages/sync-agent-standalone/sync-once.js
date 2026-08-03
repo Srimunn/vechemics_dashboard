@@ -21,6 +21,7 @@ const { callTally } = require('./lib/tally-client');
 const { buildJobs } = require('./lib/reports');
 const { push, postSyncLog, triggerRefreshKpi, fetchKpiSnapshot } = require('./lib/uploader');
 const { extractKpiDirect } = require('./lib/parsers');
+const { fetchAndPushLedgerBalances } = require('./lib/ledger-balances-fetcher');
 
 validate({ requireBackend: true });
 
@@ -96,6 +97,14 @@ async function main() {
       failures++;
       console.error(`[${job.name}] Push FAILED: ${err.message}`);
     }
+  }
+
+  // Step 4.5: Fetch & Push authoritative TDL Collection Ledger Balances (latin1)
+  try {
+    const lbRes = await fetchAndPushLedgerBalances(syncId);
+    if (lbRes && lbRes.ledgers) totalRecords += lbRes.ledgers.length;
+  } catch (err) {
+    console.error(`[ledger-balances] TDL fetch FAILED: ${err.message}`);
   }
 
   // Step 5: Call refresh-kpi to calculate Bank/Cash/GST from ledger entries in DB

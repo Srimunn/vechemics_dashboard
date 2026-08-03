@@ -43,6 +43,7 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
     salesMtd,
     purchaseMtd,
     allLedgerEntries,
+    tdlBalances,
   ] = await Promise.all([
     prisma.ledger.findMany({ where: { companyId } }),
     prisma.stockItem.findMany({ where: { companyId } }),
@@ -67,6 +68,7 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
     prisma.voucherLedgerEntry.findMany({
       where: { voucher: { companyId, isCancelled: false } },
     }),
+    prisma.ledgerBalance.findMany({ where: { companyId } }),
   ]);
 
   // --- Aggregate vouchers by type ---
@@ -117,12 +119,29 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
   const todayNetProfit = Math.round(todayGrossProfit * 0.9);
 
   // --- 4. Balances & Outstandings ---
-  // Bank Balance: ledger balances sum or voucher entries sum
+  // Priority 1: Check TDL LedgerBalance table (authoritative from Tally)
+  const tdlBank = tdlBalances
+    .filter((l) => /bank accounts|bank od/i.test(l.parentGroup))
+    .reduce((s, l) => s + num(l.closingBalance), 0);
+
+  const tdlCash = Math.abs(
+    tdlBalances
+      .filter((l) => /cash-in-hand|^cash$/i.test(l.parentGroup))
+      .reduce((s, l) => s + num(l.closingBalance), 0)
+  );
+
+  const tdlGst = Math.abs(
+    tdlBalances
+      .filter((l) => /duties/i.test(l.parentGroup))
+      .reduce((s, l) => s + num(l.closingBalance), 0)
+  );
+
+  // Bank Balance: TDL collection > ledger balances sum > voucher entries sum
   const categoryBank = ledgers
     .filter((l) => /current assets/i.test(l.name) || /bank/i.test(l.name) || /bank/i.test(l.parentGroup))
     .reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0);
 
-  let calcBankBalance = categoryBank;
+  let calcBankBalance = tdlBank !== 0 ? tdlBank : categoryBank;
   if (calcBankBalance === 0) {
     const bankEntries = allLedgerEntries.filter((e) => /bank/i.test(e.ledgerName));
     calcBankBalance = bankEntries.reduce((s, e) => s + (e.isDebit ? num(e.amount) : -num(e.amount)), 0);
@@ -131,7 +150,7 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
   }
 
   // Cash in Hand
-  let calcCashInHand = ledgers
+  let calcCashInHand = tdlCash !== 0 ? tdlCash : ledgers
     .filter((l) => /fixed assets/i.test(l.name) || /cash/i.test(l.name) || /cash/i.test(l.parentGroup))
     .reduce((s, l) => s + Math.abs(num(l.currentBalance)), 0);
 
@@ -174,19 +193,21 @@ export async function computeSnapshotForDate(companyId: string, date: Date): Pro
   const inventoryValue = stockItems.reduce((s, i) => s + num(i.closingValue), 0);
 
   // --- 6. GST Payable ---
-  let calcGstPayable = 0;
-  const gstOutput = allLedgerEntries
-    .filter((e) => /output/i.test(e.ledgerName) && !e.isDebit)
-    .reduce((s, e) => s + num(e.amount), 0);
-  const gstInput = allLedgerEntries
-    .filter((e) => /input|gst tax paid/i.test(e.ledgerName) && e.isDebit)
-    .reduce((s, e) => s + num(e.amount), 0);
-
-  calcGstPayable = Math.max(0, gstOutput - gstInput);
+  let calcGstPayable = tdlGst !== 0 ? tdlGst : 0;
   if (calcGstPayable === 0) {
-    const dutiesLedger = ledgers.find((l) => /duties|tax|gst/i.test(l.name) || /duties|tax|gst/i.test(l.parentGroup));
-    if (dutiesLedger) {
-      calcGstPayable = Math.abs(num(dutiesLedger.currentBalance));
+    const gstOutput = allLedgerEntries
+      .filter((e) => /output/i.test(e.ledgerName) && !e.isDebit)
+      .reduce((s, e) => s + num(e.amount), 0);
+    const gstInput = allLedgerEntries
+      .filter((e) => /input|gst tax paid/i.test(e.ledgerName) && e.isDebit)
+      .reduce((s, e) => s + num(e.amount), 0);
+
+    calcGstPayable = Math.max(0, gstOutput - gstInput);
+    if (calcGstPayable === 0) {
+      const dutiesLedger = ledgers.find((l) => /duties|tax|gst/i.test(l.name) || /duties|tax|gst/i.test(l.parentGroup));
+      if (dutiesLedger) {
+        calcGstPayable = Math.abs(num(dutiesLedger.currentBalance));
+      }
     }
   }
 

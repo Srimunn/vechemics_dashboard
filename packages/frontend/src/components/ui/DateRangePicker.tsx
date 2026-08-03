@@ -95,38 +95,42 @@ export function DateRangePicker({
   };
 
   return (
-    <div className={`flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-2.5 shadow-xs ${className}`}>
+    <div className={`flex flex-col gap-2.5 rounded-xl border border-gray-200 bg-white p-3 shadow-xs sm:flex-row sm:flex-wrap sm:items-center ${className}`}>
       {/* Date Pickers */}
-      <div className="flex items-center gap-2 text-xs">
-        <CalendarIcon className="h-4 w-4 text-[#1D4ED8] shrink-0" />
-        <span className="font-semibold text-gray-600">From:</span>
-        <input
-          type="date"
-          value={fromDate}
-          onChange={(e) => setFromDate(e.target.value)}
-          className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-800 focus:border-blue-500 focus:outline-none"
-        />
-        <span className="font-semibold text-gray-600">To:</span>
-        <input
-          type="date"
-          value={toDate}
-          onChange={(e) => setToDate(e.target.value)}
-          className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-800 focus:border-blue-500 focus:outline-none"
-        />
-        <button
-          type="button"
-          onClick={handleCustomApply}
-          className="inline-flex items-center gap-1 rounded-md bg-[#1D4ED8] px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-800 transition-colors shadow-xs"
-        >
-          <Check className="h-3 w-3" /> Apply
-        </button>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <div className="flex items-center gap-1.5 min-h-[44px]">
+          <CalendarIcon className="h-4 w-4 text-[#1D4ED8] shrink-0" />
+          <span className="font-semibold text-gray-600">From:</span>
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            className="rounded-lg border border-gray-300 px-2 py-2 text-xs text-gray-800 focus:border-blue-500 focus:outline-none min-h-[40px]"
+          />
+        </div>
+        <div className="flex items-center gap-1.5 min-h-[44px]">
+          <span className="font-semibold text-gray-600">To:</span>
+          <input
+            type="date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            className="rounded-lg border border-gray-300 px-2 py-2 text-xs text-gray-800 focus:border-blue-500 focus:outline-none min-h-[40px]"
+          />
+          <button
+            type="button"
+            onClick={handleCustomApply}
+            className="inline-flex items-center gap-1 rounded-lg bg-[#1D4ED8] px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800 transition-colors shadow-xs min-h-[40px]"
+          >
+            <Check className="h-3.5 w-3.5" /> Apply
+          </button>
+        </div>
       </div>
 
       {/* Vertical Divider */}
       <div className="hidden h-5 w-px bg-gray-200 sm:block mx-1" />
 
-      {/* Preset Pills */}
-      <div className="flex flex-wrap items-center gap-1">
+      {/* Preset Pills (minimum tap target) */}
+      <div className="flex flex-wrap items-center gap-1.5 pt-1 sm:pt-0">
         {[
           { id: 'today', label: 'Today' },
           { id: 'this_week', label: 'This Week' },
@@ -139,9 +143,9 @@ export function DateRangePicker({
             key={p.id}
             type="button"
             onClick={() => setPreset(p.id)}
-            className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition-colors ${
+            className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors min-h-[36px] ${
               activePreset === p.id
-                ? 'bg-blue-100 text-[#1D4ED8] ring-1 ring-blue-500/30'
+                ? 'bg-blue-100 text-[#1D4ED8] ring-1 ring-blue-500/30 font-bold'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >

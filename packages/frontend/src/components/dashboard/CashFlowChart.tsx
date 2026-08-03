@@ -12,44 +12,45 @@ export interface CashPoint {
 
 export function CashFlowChart({ data }: { data: CashPoint[] }) {
   return (
-    <div className="h-72 w-full">
+    <div className="h-[180px] sm:h-[260px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
+        <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
           <defs>
             <linearGradient id="cashFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.25} />
-              <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+              <stop offset="0%" stopColor="#2563EB" stopOpacity={0.25} />
+              <stop offset="100%" stopColor="#2563EB" stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
           <XAxis
             dataKey="day"
             tickLine={false}
             axisLine={false}
-            interval={4}
-            tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+            interval={5}
+            tick={{ fontSize: 12, fill: '#64748B' }}
           />
           <YAxis
             tickLine={false}
             axisLine={false}
-            width={52}
-            tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+            width={48}
+            tick={{ fontSize: 12, fill: '#64748B' }}
             tickFormatter={(v: number) => formatCompactCurrency(v).replace('₹', '')}
           />
           <Tooltip
             contentStyle={{
-              borderRadius: 8,
-              border: '1px solid hsl(var(--border))',
-              background: 'hsl(var(--card))',
-              fontSize: 12,
+              borderRadius: 12,
+              border: '1px solid #E2E8F0',
+              background: '#FFFFFF',
+              fontSize: 13,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
             }}
             formatter={(v: number) => [formatCompactCurrency(v), 'Net cash']}
           />
           <Area
             type="monotone"
             dataKey="value"
-            stroke="hsl(var(--primary))"
-            strokeWidth={2}
+            stroke="#2563EB"
+            strokeWidth={2.5}
             fill="url(#cashFill)"
           />
         </AreaChart>

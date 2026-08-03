@@ -63,9 +63,9 @@ function CeoSkeleton() {
     <div className="space-y-6 p-4 md:p-8">
       <Skeleton className="h-10 w-72" />
       <Skeleton className="h-28 w-full rounded-xl" />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 17 }).map((_, i) => (
-          <Skeleton key={i} className="h-40 rounded-xl" />
+          <Skeleton key={i} className="h-28 rounded-xl" />
         ))}
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -168,19 +168,19 @@ export default function CeoDashboardPage() {
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.15 }}
-      className="space-y-6 p-6 md:p-8 max-w-[1600px] mx-auto"
+      className="space-y-4 sm:space-y-6 p-3.5 sm:p-6 md:p-8 max-w-[1600px] mx-auto"
     >
-      {/* Action buttons row */}
-      <div className="flex flex-wrap items-center justify-end gap-2.5">
+      {/* Desktop action buttons row */}
+      <div className="hidden lg:flex flex-wrap items-center justify-end gap-2.5">
         <ExportButton moduleName="financial-overview" label="Export Report" />
         <RefreshButton
           onRefreshed={load}
-          className="bg-[#1D4ED8] text-white hover:bg-[#1E40AF] shadow-none border-none text-[13px] py-2 px-4"
+          className="bg-[#1D4ED8] text-white hover:bg-[#1E40AF] shadow-none border-none text-[13px] py-2 px-4 min-h-[44px]"
         />
         <button
           type="button"
           onClick={() => router.push('/dashboard/daily-report')}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-white px-4 py-2 text-[13px] font-medium text-[#475569] hover:bg-[#F8FAFC] hover:border-[#CBD5E1] transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-white px-4 py-2 text-[13px] font-medium text-[#475569] hover:bg-[#F8FAFC] hover:border-[#CBD5E1] transition-colors min-h-[44px]"
         >
           <FileText className="h-4 w-4 text-[#64748B]" /> Daily Business Report
         </button>
@@ -189,16 +189,21 @@ export default function CeoDashboardPage() {
       {/* Executive Intelligence banner */}
       <GreetingHeader name={user.name} fyLabel={company.fyLabel} lastSync={lastSync} onRefreshed={load} />
 
-      {/* Section heading */}
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-[20px] font-bold text-[#0F172A] tracking-tight">
-          Business Health Indicators <span className="text-[20px] font-normal text-[#94A3B8]">({KPI_CONFIGS.length} Key Metrics)</span>
-        </h2>
-        <p className="text-[13px] text-[#94A3B8]">Status color coded · Click any KPI card to drill-down into detail module</p>
+      {/* Mobile Floating Export Button */}
+      <div className="lg:hidden">
+        <ExportButton moduleName="financial-overview" label="Export Report" />
       </div>
 
-      {/* KPI grid with drill-down click handlers */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Section heading */}
+      <div className="mb-3 sm:mb-5 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-[18px] sm:text-[20px] font-bold text-[#0F172A] tracking-tight">
+          Business Health Indicators <span className="text-[14px] sm:text-[20px] font-normal text-[#94A3B8]">({KPI_CONFIGS.length} Metrics)</span>
+        </h2>
+        <p className="hidden sm:block text-[13px] text-[#94A3B8]">Status color coded · Click any KPI card to drill-down into detail module</p>
+      </div>
+
+      {/* KPI grid: 2 cards per row on mobile (grid-cols-2), 4 per row on desktop */}
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         {KPI_CONFIGS.map((cfg, idx) => {
           const rawValue = cfg.key ? today[cfg.key] : undefined;
           const value = (rawValue !== undefined && rawValue !== 0) ? rawValue : (cfg.overrideValue ?? 0);
@@ -241,44 +246,44 @@ export default function CeoDashboardPage() {
       </div>
 
       {/* 4F: "Key Business Ratios" Section at Dashboard Footer */}
-      <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-slate-900 to-blue-950 p-6 text-white shadow-lg space-y-4">
-        <div className="flex items-center justify-between border-b border-blue-800/60 pb-3">
-          <div className="flex items-center gap-2.5">
-            <ShieldCheck className="h-6 w-6 text-blue-400" />
-            <h3 className="text-lg font-bold text-white">Executive Key Business Ratios</h3>
+      <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-slate-900 to-blue-950 p-4 sm:p-6 text-white shadow-lg space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-blue-800/60 pb-3 gap-1">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-blue-400 shrink-0" />
+            <h3 className="text-base sm:text-lg font-bold text-white">Executive Key Business Ratios</h3>
           </div>
-          <span className="text-xs text-blue-300 font-medium">Real-time Balance Sheet &amp; P&amp;L Ratios</span>
+          <span className="text-[11px] sm:text-xs text-blue-300 font-medium">Real-time Balance Sheet &amp; P&amp;L Ratios</span>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6 text-center">
-          <div className="rounded-xl border border-blue-800/50 bg-white/5 p-3.5">
-            <span className="text-[11px] font-bold text-blue-300 uppercase tracking-wider">Current Ratio</span>
-            <p className="mt-1 text-2xl font-black text-white">{currentRatio}</p>
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6 text-center">
+          <div className="rounded-xl border border-blue-800/50 bg-white/5 p-2.5 sm:p-3.5">
+            <span className="text-[10px] sm:text-[11px] font-bold text-blue-300 uppercase tracking-wider">Current Ratio</span>
+            <p className="mt-1 text-xl sm:text-2xl font-black text-white">{currentRatio}</p>
             <p className="text-[10px] text-gray-400 mt-0.5">Assets / Payables</p>
           </div>
-          <div className="rounded-xl border border-emerald-800/50 bg-emerald-950/20 p-3.5">
-            <span className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider">Gross Margin</span>
-            <p className="mt-1 text-2xl font-black text-emerald-400">{grossMargin}%</p>
+          <div className="rounded-xl border border-emerald-800/50 bg-emerald-950/20 p-2.5 sm:p-3.5">
+            <span className="text-[10px] sm:text-[11px] font-bold text-emerald-300 uppercase tracking-wider">Gross Margin</span>
+            <p className="mt-1 text-xl sm:text-2xl font-black text-emerald-400">{grossMargin}%</p>
             <p className="text-[10px] text-gray-400 mt-0.5">Gross Profit / Sales</p>
           </div>
-          <div className="rounded-xl border border-purple-800/50 bg-purple-950/20 p-3.5">
-            <span className="text-[11px] font-bold text-purple-300 uppercase tracking-wider">Net Margin</span>
-            <p className="mt-1 text-2xl font-black text-purple-400">{netMargin}%</p>
+          <div className="rounded-xl border border-purple-800/50 bg-purple-950/20 p-2.5 sm:p-3.5">
+            <span className="text-[10px] sm:text-[11px] font-bold text-purple-300 uppercase tracking-wider">Net Margin</span>
+            <p className="mt-1 text-xl sm:text-2xl font-black text-purple-400">{netMargin}%</p>
             <p className="text-[10px] text-gray-400 mt-0.5">Net Profit / Sales</p>
           </div>
-          <div className="rounded-xl border border-rose-800/50 bg-rose-950/20 p-3.5">
-            <span className="text-[11px] font-bold text-rose-300 uppercase tracking-wider">Receivable Days</span>
-            <p className="mt-1 text-2xl font-black text-rose-400">{recDays} days</p>
+          <div className="rounded-xl border border-rose-800/50 bg-rose-950/20 p-2.5 sm:p-3.5">
+            <span className="text-[10px] sm:text-[11px] font-bold text-rose-300 uppercase tracking-wider">Receivable Days</span>
+            <p className="mt-1 text-xl sm:text-2xl font-black text-rose-400">{recDays} days</p>
             <p className="text-[10px] text-gray-400 mt-0.5">DSO Collection</p>
           </div>
-          <div className="rounded-xl border border-amber-800/50 bg-amber-950/20 p-3.5">
-            <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider">Payable Days</span>
-            <p className="mt-1 text-2xl font-black text-amber-400">{payDays} days</p>
+          <div className="rounded-xl border border-amber-800/50 bg-amber-950/20 p-2.5 sm:p-3.5">
+            <span className="text-[10px] sm:text-[11px] font-bold text-amber-300 uppercase tracking-wider">Payable Days</span>
+            <p className="mt-1 text-xl sm:text-2xl font-black text-amber-400">{payDays} days</p>
             <p className="text-[10px] text-gray-400 mt-0.5">DPO Payment</p>
           </div>
-          <div className="rounded-xl border border-indigo-800/50 bg-indigo-950/20 p-3.5">
-            <span className="text-[11px] font-bold text-indigo-300 uppercase tracking-wider">Stock Turnover</span>
-            <p className="mt-1 text-2xl font-black text-indigo-400">{stockTurnover}x</p>
+          <div className="rounded-xl border border-indigo-800/50 bg-indigo-950/20 p-2.5 sm:p-3.5">
+            <span className="text-[10px] sm:text-[11px] font-bold text-indigo-300 uppercase tracking-wider">Stock Turnover</span>
+            <p className="mt-1 text-xl sm:text-2xl font-black text-indigo-400">{stockTurnover}x</p>
             <p className="text-[10px] text-gray-400 mt-0.5">Purchases / Inventory</p>
           </div>
         </div>

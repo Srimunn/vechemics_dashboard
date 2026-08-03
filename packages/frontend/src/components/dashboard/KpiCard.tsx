@@ -52,21 +52,24 @@ export function KpiCard({
 
   const topBorderStyle = accentColor ? { borderTop: `3px solid ${accentColor}` } : {};
 
-  return (
+  const cardContent = (
     <div
       style={topBorderStyle}
-      className="group flex flex-col justify-between rounded-[14px] bg-[#FFFFFF] p-6 transition-all duration-200 border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)] hover:border-[#CBD5E1]"
+      className={cn(
+        'group flex flex-col justify-between rounded-[16px] bg-white p-3.5 sm:p-6 transition-all duration-200 border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)] hover:border-[#CBD5E1] min-h-[105px] w-full',
+        href && 'cursor-pointer active:scale-[0.98]',
+      )}
     >
       <div>
         {/* Header row: Label & Delta pill */}
-        <div className="flex items-start justify-between gap-2 mb-3">
-          <span className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[#64748B]">
+        <div className="flex items-start justify-between gap-1.5 mb-2">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B] line-clamp-1 leading-snug">
             {label}
           </span>
           {delta && (
             <span
               className={cn(
-                'inline-flex items-center gap-0.5 rounded-full px-[10px] py-[4px] text-[12px] font-semibold',
+                'inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] sm:text-[12px] font-semibold shrink-0',
                 TONE_CLASS[tone],
               )}
             >
@@ -76,30 +79,37 @@ export function KpiCard({
           )}
         </div>
 
-        {/* Big number */}
-        <div className="mb-2 text-[32px] font-bold tabular tracking-tight text-[#0F172A] leading-none">
+        {/* Big number: 22px on mobile, 32px on desktop */}
+        <div className="my-1 text-[22px] sm:text-[32px] font-bold tabular tracking-tight text-[#0F172A] leading-tight">
           {format(value)}
         </div>
 
         {/* Yesterday comparison */}
         {comparisonLabel && comparisonValue !== undefined && (
-          <p className="text-[13px] text-[#94A3B8]">
+          <p className="text-[11px] sm:text-[13px] text-[#94A3B8] line-clamp-1">
             {comparisonLabel}: <span className="font-medium text-[#64748B] tabular">{format(comparisonValue)}</span>
           </p>
         )}
       </div>
 
-      {/* Analytics link */}
+      {/* Analytics link on desktop */}
       {href && (
-        <div className="mt-4">
-          <Link
-            href={href}
-            className="inline-flex items-center text-[13px] font-medium text-[#2563EB] hover:underline"
-          >
+        <div className="mt-2.5 hidden sm:block">
+          <span className="inline-flex items-center text-[12px] font-medium text-[#2563EB] group-hover:underline">
             {linkLabel}
-          </Link>
+          </span>
         </div>
       )}
     </div>
   );
+
+  if (href) {
+    return (
+      <Link href={href} className="block w-full text-left">
+        {cardContent}
+      </Link>
+    );
+  }
+
+  return cardContent;
 }

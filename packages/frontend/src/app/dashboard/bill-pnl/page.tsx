@@ -182,43 +182,43 @@ export default function BillPnlPage() {
       {/* Date Range Bar */}
       <DateRangePicker initialFrom={fromDate} initialTo={toDate} onApply={(from, to) => { setFromDate(from); setToDate(to); }} />
 
-      {/* Summary KPI Cards */}
+      {/* Summary KPI Cards (2 per row on mobile) */}
       {data?.summary && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-gray-200 bg-white p-3.5 sm:p-5 shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Total Sales Value</span>
-              <div className="rounded-lg bg-blue-50 p-2 text-blue-600"><IndianRupee className="h-5 w-5" /></div>
+              <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-gray-500 line-clamp-1">Total Sales Value</span>
+              <div className="rounded-lg bg-blue-50 p-1.5 sm:p-2 text-blue-600 shrink-0"><IndianRupee className="h-4 w-4 sm:h-5 sm:w-5" /></div>
             </div>
-            <p className="mt-2 text-2xl font-bold text-gray-900">{formatINR(data.summary.totalSales)}</p>
-            <p className="mt-1 text-xs text-gray-500">Gross invoiced amount</p>
+            <p className="mt-1.5 text-lg sm:text-2xl font-bold text-gray-900">{formatINR(data.summary.totalSales)}</p>
+            <p className="mt-0.5 text-[10px] sm:text-xs text-gray-500 line-clamp-1">Gross invoiced amount</p>
           </div>
 
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="rounded-xl border border-gray-200 bg-white p-3.5 sm:p-5 shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Total Cost of Goods</span>
-              <div className="rounded-lg bg-amber-50 p-2 text-amber-600"><ShoppingBag className="h-5 w-5" /></div>
+              <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-gray-500 line-clamp-1">Cost of Goods</span>
+              <div className="rounded-lg bg-amber-50 p-1.5 sm:p-2 text-amber-600 shrink-0"><ShoppingBag className="h-4 w-4 sm:h-5 sm:w-5" /></div>
             </div>
-            <p className="mt-2 text-2xl font-bold text-gray-900">{formatINR(data.summary.totalCost)}</p>
-            <p className="mt-1 text-xs text-gray-500">Weighted average stock cost</p>
+            <p className="mt-1.5 text-lg sm:text-2xl font-bold text-gray-900">{formatINR(data.summary.totalCost)}</p>
+            <p className="mt-0.5 text-[10px] sm:text-xs text-gray-500 line-clamp-1">Weighted stock cost</p>
           </div>
 
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="rounded-xl border border-gray-200 bg-white p-3.5 sm:p-5 shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Total Bill Profit</span>
-              <div className="rounded-lg bg-emerald-50 p-2 text-emerald-600"><TrendingUp className="h-5 w-5" /></div>
+              <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-gray-500 line-clamp-1">Total Bill Profit</span>
+              <div className="rounded-lg bg-emerald-50 p-1.5 sm:p-2 text-emerald-600 shrink-0"><TrendingUp className="h-4 w-4 sm:h-5 sm:w-5" /></div>
             </div>
-            <p className="mt-2 text-2xl font-bold text-emerald-600">{formatINR(data.summary.totalProfit)}</p>
-            <p className="mt-1 text-xs text-gray-500">Net margin across bills</p>
+            <p className="mt-1.5 text-lg sm:text-2xl font-bold text-emerald-600">{formatINR(data.summary.totalProfit)}</p>
+            <p className="mt-0.5 text-[10px] sm:text-xs text-gray-500 line-clamp-1">Net margin across bills</p>
           </div>
 
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="rounded-xl border border-gray-200 bg-white p-3.5 sm:p-5 shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Average Margin</span>
-              <div className="rounded-lg bg-indigo-50 p-2 text-indigo-600"><Layers className="h-5 w-5" /></div>
+              <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-gray-500 line-clamp-1">Average Margin</span>
+              <div className="rounded-lg bg-indigo-50 p-1.5 sm:p-2 text-indigo-600 shrink-0"><Layers className="h-4 w-4 sm:h-5 sm:w-5" /></div>
             </div>
-            <p className="mt-2 text-2xl font-bold text-indigo-600">{data.summary.avgMargin.toFixed(1)}%</p>
-            <p className="mt-1 text-xs text-gray-500">Overall profit margin</p>
+            <p className="mt-1.5 text-lg sm:text-2xl font-bold text-indigo-600">{data.summary.avgMargin.toFixed(1)}%</p>
+            <p className="mt-0.5 text-[10px] sm:text-xs text-gray-500 line-clamp-1">Overall profit margin</p>
           </div>
         </div>
       )}

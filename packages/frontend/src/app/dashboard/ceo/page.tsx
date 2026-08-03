@@ -76,27 +76,66 @@ function CeoSkeleton() {
   );
 }
 
+function formatDateDisplay(dateStr: string): string {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const month = monthNames[d.getUTCMonth()];
+  const year = d.getUTCFullYear();
+  return `${day}-${month}-${year}`;
+}
+
+function getDynamicKpiLabel(cfgLabel: string, key?: KpiKey, selectedDateStr?: string): string {
+  const todayStr = new Date().toISOString().split('T')[0]!;
+  if (!selectedDateStr || selectedDateStr === todayStr) {
+    return cfgLabel;
+  }
+  const dateFormatted = formatDateDisplay(selectedDateStr);
+  if (key === 'todaySales') return `SALES ON ${dateFormatted}`;
+  if (key === 'todayPurchase') return `PURCHASE ON ${dateFormatted}`;
+  if (key === 'collectionsToday') return `COLLECTIONS ON ${dateFormatted}`;
+  if (key === 'ordersBilledToday') return `BILLED ON ${dateFormatted}`;
+  return cfgLabel;
+}
+
 export default function CeoDashboardPage() {
   const router = useRouter();
+  const getTodayStr = () => new Date().toISOString().split('T')[0]!;
+  const [selectedDate, setSelectedDate] = React.useState(getTodayStr());
+
   const [data, setData] = React.useState<CeoDashboardResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(false);
-  const load = React.useCallback(async () => {
+
+  const load = React.useCallback(async (targetDate?: string) => {
     setLoading(true);
     setError(false);
     try {
-      const ceoData = await getCeoDashboard();
+      const d = targetDate || selectedDate;
+      const ceoData = await getCeoDashboard(d);
       setData(ceoData);
     } catch {
       setError(true);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedDate]);
 
   React.useEffect(() => {
-    void load();
-  }, [load]);
+    void load(selectedDate);
+  }, [selectedDate]);
+
+  React.useEffect(() => {
+    function handleCustomDate(e: Event) {
+      const customEvent = e as CustomEvent<string>;
+      if (customEvent.detail) {
+        setSelectedDate(customEvent.detail);
+      }
+    }
+    window.addEventListener('vchemics-date-change', handleCustomDate);
+    return () => window.removeEventListener('vchemics-date-change', handleCustomDate);
+  }, []);
 
   if (loading && !data) return <CeoSkeleton />;
 
@@ -110,7 +149,7 @@ export default function CeoDashboardPage() {
             </div>
             <h2 className="mt-4 text-lg font-semibold text-[#0F172A]">Couldn&apos;t reach the backend</h2>
             <p className="mt-1 text-sm text-[#64748B]">Retrying automatically won&apos;t hurt — try again.</p>
-            <Button variant="primary" className="mt-5 bg-[#1D4ED8] hover:bg-[#1E40AF]" onClick={() => void load()}>
+            <Button variant="primary" className="mt-5 bg-[#1D4ED8] hover:bg-[#1E40AF]" onClick={() => void load(selectedDate)}>
               <RefreshCw className="h-4 w-4" /> Retry
             </Button>
           </CardContent>
@@ -126,7 +165,7 @@ export default function CeoDashboardPage() {
   if (!today) {
     return (
       <div className="p-4 md:p-8">
-        <GreetingHeader name={user.name} fyLabel={company.fyLabel} lastSync={lastSync} onRefreshed={load} />
+        <GreetingHeader name={user.name} fyLabel={company.fyLabel} lastSync={lastSync} onRefreshed={() => load(selectedDate)} />
         <Card className="mt-6 rounded-[14px] border border-[#E2E8F0] bg-white shadow-sm">
           <CardContent className="flex flex-col items-center gap-3 p-12 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#EFF6FF] text-[#2563EB]">
@@ -174,7 +213,7 @@ export default function CeoDashboardPage() {
       <div className="hidden lg:flex flex-wrap items-center justify-end gap-2.5">
         <ExportButton moduleName="financial-overview" label="Export Report" />
         <RefreshButton
-          onRefreshed={load}
+          onRefreshed={() => load(selectedDate)}
           className="bg-[#1D4ED8] text-white hover:bg-[#1E40AF] shadow-none border-none text-[13px] py-2 px-4 min-h-[44px]"
         />
         <button
@@ -187,7 +226,7 @@ export default function CeoDashboardPage() {
       </div>
 
       {/* Executive Intelligence banner */}
-      <GreetingHeader name={user.name} fyLabel={company.fyLabel} lastSync={lastSync} onRefreshed={load} />
+      <GreetingHeader name={user.name} fyLabel={company.fyLabel} lastSync={lastSync} onRefreshed={() => load(selectedDate)} />
 
       {/* Mobile Floating Export Button */}
       <div className="lg:hidden">
@@ -210,10 +249,11 @@ export default function CeoDashboardPage() {
           const prev = (cfg.key && yesterday) ? yesterday[cfg.key] : undefined;
           const delta = prev !== undefined ? computeDelta(value, prev) : undefined;
           const isCount = cfg.key === 'ordersBilledToday' || cfg.key === 'newCustomersToday';
+          const dynamicLabel = getDynamicKpiLabel(cfg.label, cfg.key, selectedDate);
           return (
             <KpiCard
               key={cfg.key || `custom-kpi-${idx}`}
-              label={cfg.label}
+              label={dynamicLabel}
               value={value}
               format={isCount ? (v) => new Intl.NumberFormat('en-IN').format(v) : undefined}
               delta={delta}

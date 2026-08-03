@@ -9,10 +9,11 @@ const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === 'true';
  * if the backend is unreachable, returns bundled sample data so the UI always
  * renders. Throwing is reserved for genuinely unexpected states.
  */
-export async function getCeoDashboard(): Promise<CeoDashboardResponse> {
+export async function getCeoDashboard(date?: string): Promise<CeoDashboardResponse> {
   if (USE_MOCK) return mockDashboard;
 
-  const res = await fetch(`${BACKEND}/api/dashboard/ceo`, { cache: 'no-store' });
+  const url = date ? `${BACKEND}/api/dashboard/ceo?date=${encodeURIComponent(date)}` : `${BACKEND}/api/dashboard/ceo`;
+  const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) throw new Error(`Dashboard request failed: ${res.status}`);
   return (await res.json()) as CeoDashboardResponse;
 }

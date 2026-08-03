@@ -17,19 +17,20 @@ model User {
 }
 
 model Company {
-  id          String   @id @default(cuid())
-  tallyName   String   @unique // "VCHEMICS INDIA SOLUTIONS-2026-2027"
+  id          String    @id @default(cuid())
+  tallyName   String    @unique // "VCHEMICS INDIA SOLUTIONS-2026-2027"
   displayName String
   fyStart     DateTime
   fyEnd       DateTime
-  createdAt   DateTime @default(now())
+  lastSyncAt  DateTime?
+  createdAt   DateTime  @default(now())
 
-  vouchers      Voucher[]
-  ledgers       Ledger[]
-  stockItems    StockItem[]
-  outstandings  Outstanding[]
-  kpiSnapshots  KpiSnapshot[]
-  notifications Notification[]
+  vouchers       Voucher[]
+  ledgers        Ledger[]
+  stockItems     StockItem[]
+  outstandings   Outstanding[]
+  kpiSnapshots   KpiSnapshot[]
+  notifications  Notification[]
   ledgerBalances LedgerBalance[]
 }
 

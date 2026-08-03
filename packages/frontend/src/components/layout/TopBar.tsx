@@ -16,14 +16,47 @@ function formatINR(val: number): string {
   return '₹' + new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(val);
 }
 
-export function TopBar({ userName = 'Velmurugan', userRole = 'CEO / MD' }: { userName?: string; userRole?: string }) {
+export function TopBar({
+  userName = 'Velmurugan',
+  userRole = 'CEO / MD',
+  selectedDate: propSelectedDate,
+  onDateChange,
+}: {
+  userName?: string;
+  userRole?: string;
+  selectedDate?: string;
+  onDateChange?: (date: string) => void;
+}) {
   const router = useRouter();
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [notifOpen, setNotifOpen] = React.useState(false);
   const [notifications, setNotifications] = React.useState<any[]>([]);
   const [unreadCount, setUnreadCount] = React.useState(0);
   const [refreshing, setRefreshing] = React.useState(false);
-  const [selectedDate, setSelectedDate] = React.useState(new Date().toISOString().split('T')[0]!);
+  const [selectedDate, setSelectedDate] = React.useState(
+    propSelectedDate || new Date().toISOString().split('T')[0]!
+  );
+
+  React.useEffect(() => {
+    if (propSelectedDate && propSelectedDate !== selectedDate) {
+      setSelectedDate(propSelectedDate);
+    }
+  }, [propSelectedDate]);
+
+  const getTodayStr = () => new Date().toISOString().split('T')[0]!;
+  const getYesterdayStr = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().split('T')[0]!;
+  };
+
+  const handleDateSelect = (d: string) => {
+    setSelectedDate(d);
+    if (onDateChange) onDateChange(d);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('vchemics-date-change', { detail: d }));
+    }
+  };
 
   // Search state
   const [searchQuery, setSearchQuery] = React.useState('');
@@ -274,15 +307,43 @@ export function TopBar({ userName = 'Velmurugan', userRole = 'CEO / MD' }: { use
                 <span className="font-semibold text-emerald-700">FY:</span> 2026-27
               </div>
 
-              {/* Date Picker Filter */}
-              <div className="flex items-center gap-1 rounded-lg border border-[#E2E8F0] bg-[#FFFFFF] px-2.5 py-1 text-[12px] font-medium text-[#334155]">
-                <Calendar className="h-3.5 w-3.5 text-[#94A3B8]" />
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="text-xs focus:outline-none"
-                />
+              {/* Date Picker Filter with Quick Buttons */}
+              <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1 rounded-lg border border-[#E2E8F0] bg-[#FFFFFF] px-2.5 py-1 text-[12px] font-medium text-[#334155] min-h-[36px]">
+                  <Calendar className="h-3.5 w-3.5 text-[#94A3B8]" />
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => handleDateSelect(e.target.value)}
+                    className="text-xs focus:outline-none bg-transparent"
+                  />
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleDateSelect(getTodayStr())}
+                    className={cn(
+                      'rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors min-h-[36px]',
+                      selectedDate === getTodayStr()
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200',
+                    )}
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDateSelect(getYesterdayStr())}
+                    className={cn(
+                      'rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors min-h-[36px]',
+                      selectedDate === getYesterdayStr()
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200',
+                    )}
+                  >
+                    Yesterday
+                  </button>
+                </div>
               </div>
 
               {/* Manual Sync Trigger Button */}

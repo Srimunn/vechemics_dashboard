@@ -402,6 +402,11 @@ async function ingestKpiDirect(companyId: string, data: unknown): Promise<number
     create: { companyId, snapshotDate: dayStart, ...values },
   });
 
+  await prisma.company.update({
+    where: { id: companyId },
+    data: { lastSyncAt: new Date() },
+  }).catch(() => {});
+
   return 1;
 }
 
@@ -473,6 +478,11 @@ async function ingestLedgerBalances(companyId: string, data: unknown): Promise<n
       },
     });
   }
+
+  await prisma.company.update({
+    where: { id: companyId },
+    data: { lastSyncAt: new Date() },
+  }).catch(() => {});
 
   return parsed.ledgers?.length || 1;
 }

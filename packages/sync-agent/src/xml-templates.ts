@@ -114,3 +114,13 @@ export function billsReceivable(company: string, fromDate: string, toDate: strin
 export function billsPayable(company: string, fromDate: string, toDate: string): string {
   return exportDataReport('Bills Payable', company, fromDate, toDate);
 }
+
+export function cashBook(company: string, ledgerName = 'Cash', fromDate: string, toDate: string): string {
+  return exportDataReport(
+    'Cash Book',
+    company,
+    fromDate,
+    toDate,
+    `          <LEDGERNAME>${ledgerName}</LEDGERNAME>\n`,
+  );
+}

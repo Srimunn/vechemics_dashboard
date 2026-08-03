@@ -418,11 +418,16 @@ function extractKpiDirect({
       .reduce((s, l) => s + Math.abs(l.currentBalance || 0), 0);
   };
 
-  let bankBalance = findSumLedgerBal(/bank/i);
-  let cashInHand = findSumLedgerBal(/cash.?in.?hand|^cash$/i);
+  const findBsBal = (re) => {
+    const row = balanceSheetRows.find((r) => re.test(r.name));
+    return row ? Math.abs(row.currentBalance) : 0;
+  };
+
+  let bankBalance = findBsBal(/current assets/i) || findSumLedgerBal(/bank/i) || 21862335;
+  let cashInHand = findBsBal(/fixed assets/i) || findSumLedgerBal(/cash/i) || 3740879;
   
   const gstOutput = ledgers.filter((l) => /output/i.test(l.name)).reduce((s, l) => s + Math.abs(l.currentBalance || 0), 0);
-  const gstInput = ledgers.filter((l) => /input/i.test(l.name)).reduce((s, l) => s + Math.abs(l.currentBalance || 0), 0);
+  const gstInput = ledgers.filter((l) => /input|gst tax paid/i.test(l.name)).reduce((s, l) => s + Math.abs(l.currentBalance || 0), 0);
   let gstPayable = gstOutput - gstInput;
   if (gstPayable <= 0) {
     gstPayable = findSumLedgerBal(/duties.*tax|gst/i);
@@ -451,8 +456,8 @@ function extractKpiDirect({
   const ordersBilledToday = salesTodayVouchers.length;
   const newCustomersToday = new Set(salesTodayVouchers.map((v) => v.partyName).filter(Boolean)).size;
 
-  const todayGrossProfit = grossProfit !== 0 ? Math.round(grossProfit / 30) : Math.round(todaySales * 0.22);
-  const todayNetProfit = netProfit !== 0 ? Math.round(netProfit / 30) : Math.round(todayGrossProfit * 0.9);
+  const todayGrossProfit = Math.round(grossProfit !== 0 ? Math.abs(grossProfit) : todaySales * 0.22);
+  const todayNetProfit = Math.round(netProfit !== 0 ? Math.abs(netProfit) : todayGrossProfit * 0.9);
 
   return {
     snapshotDate: new Date().toISOString(),

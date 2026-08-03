@@ -84,6 +84,10 @@ async function main() {
   // Step 3 & 4: Push vouchers and bills to backend
   for (const job of jobs) {
     if (!collected[job.name]) continue;
+    if (job.jobType === 'cash-book') {
+      console.log(`[cash-book] Cash Book export fetched. Raw len: ${collected['cash-book']?.raw?.length || 0}`);
+      continue;
+    }
     try {
       const sent = await push(syncId, job.jobType, collected[job.name]);
       totalRecords += sent;

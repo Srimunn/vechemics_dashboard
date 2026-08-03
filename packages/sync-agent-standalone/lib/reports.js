@@ -19,6 +19,7 @@ function buildJobs(config) {
     { name: 'voucher-register-payment', jobType: 'voucher-register-payment', xml: t.voucherRegister(co, 'Payment', from, to), parse: (x) => p.parseVouchers(x, 'Payment') },
     { name: 'bills-receivable', jobType: 'bills-receivable', xml: t.billsReceivable(co, from, to), parse: (x) => p.parseOutstandings(x, 'receivable') },
     { name: 'bills-payable', jobType: 'bills-payable', xml: t.billsPayable(co, from, to), parse: (x) => p.parseOutstandings(x, 'payable') },
+    { name: 'cash-book', jobType: 'cash-book', xml: t.cashBook(co, 'Cash', from, to), parse: (parsed, raw) => ({ raw, parsed }) },
   ];
 }
 

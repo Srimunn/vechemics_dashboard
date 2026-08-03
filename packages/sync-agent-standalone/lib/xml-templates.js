@@ -74,6 +74,13 @@ function billsPayable(company, fromDate, toDate) {
   return exportDataReport('Bills Payable', company, fromDate, toDate);
 }
 
+function cashBook(company, ledgerName = 'Cash', fromDate, toDate) {
+  return exportDataReport(
+    'Cash Book', company, fromDate, toDate,
+    `          <LEDGERNAME>${ledgerName}</LEDGERNAME>\n`
+  );
+}
+
 module.exports = {
-  testConnection, dayBook, voucherRegister, stockSummary, balanceSheet, profitAndLoss, trialBalance, billsReceivable, billsPayable,
+  testConnection, dayBook, voucherRegister, stockSummary, balanceSheet, profitAndLoss, trialBalance, billsReceivable, billsPayable, cashBook,
 };

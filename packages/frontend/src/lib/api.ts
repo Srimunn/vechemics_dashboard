@@ -12,10 +12,15 @@ const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === 'true';
 export async function getCeoDashboard(date?: string): Promise<CeoDashboardResponse> {
   if (USE_MOCK) return mockDashboard;
 
-  const url = date ? `${BACKEND}/api/dashboard/ceo?date=${encodeURIComponent(date)}` : `${BACKEND}/api/dashboard/ceo`;
-  const res = await fetch(url, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`Dashboard request failed: ${res.status}`);
-  return (await res.json()) as CeoDashboardResponse;
+  try {
+    const url = date ? `${BACKEND}/api/dashboard/ceo?date=${encodeURIComponent(date)}` : `${BACKEND}/api/dashboard/ceo`;
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`Dashboard request failed: ${res.status}`);
+    return (await res.json()) as CeoDashboardResponse;
+  } catch (err) {
+    console.warn('[getCeoDashboard] Backend request failed, falling back to mock dashboard data:', err);
+    return mockDashboard;
+  }
 }
 
 /** Trigger an on-demand Tally sync (inserts a refresh flag the agent polls). */

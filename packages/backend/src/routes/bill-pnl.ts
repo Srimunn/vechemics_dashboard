@@ -70,6 +70,9 @@ billPnlRouter.get('/', requireUser, async (req: Request, res: Response) => {
     const voucherIds = salesVouchers.map((v) => v.id);
     const overheads = await prisma.billOverheadCost.findMany({
       where: { voucherId: { in: voucherIds } },
+    }).catch((err) => {
+      console.warn('BillOverheadCost query skipped (table missing or DB syncing):', err);
+      return [];
     });
     const overheadMap = new Map(overheads.map((o) => [o.voucherId, o]));
 

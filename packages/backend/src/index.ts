@@ -23,8 +23,11 @@ const app = express();
 // defaults to reflecting any origin (fine for Phase 1 — no cookies cross-site).
 const corsOrigin = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map((s) => s.trim())
-  : true;
-app.use(cors({ origin: corsOrigin }));
+  : [
+      'https://vchemicsfrontend-production.up.railway.app',
+      'http://localhost:3000'
+    ];
+app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(express.json({ limit: '10mb' })); // sync agent batches can be large
 app.use(pinoHttp({ logger }));
 

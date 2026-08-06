@@ -67,6 +67,12 @@ billPnlRouter.get('/', requireUser, async (req: Request, res: Response) => {
       orderBy: { date: 'desc' },
     });
 
+    const voucherIds = salesVouchers.map((v) => v.id);
+    const overheads = await prisma.billOverheadCost.findMany({
+      where: { voucherId: { in: voucherIds } },
+    });
+    const overheadMap = new Map(overheads.map((o) => [o.voucherId, o]));
+
     // Compute bill-level metrics
     const bills = salesVouchers.map((v) => {
       const items = v.items.map((i) => {
@@ -97,6 +103,36 @@ billPnlRouter.get('/', requireUser, async (req: Request, res: Response) => {
       const profit = saleValue - costValue;
       const marginPct = saleValue > 0 ? (profit / saleValue) * 100 : 0;
 
+      const rawOverhead = overheadMap.get(v.id) || null;
+      const transportCost = rawOverhead ? num(rawOverhead.transportCost) : 0;
+      const labelingCost = rawOverhead ? num(rawOverhead.labelingCost) : 0;
+      const loadingCost = rawOverhead ? num(rawOverhead.loadingCost) : 0;
+      const otherCost = rawOverhead ? num(rawOverhead.otherCost) : 0;
+      const totalOverhead = Math.round((transportCost + labelingCost + loadingCost + otherCost) * 100) / 100;
+
+      const tallyProfit = Math.round(profit * 100) / 100;
+      const tallyMargin = Math.round(marginPct * 100) / 100;
+      const adjustedProfit = Math.round((profit - totalOverhead) * 100) / 100;
+      const adjustedMargin = saleValue > 0 ? Math.round((((profit - totalOverhead) / saleValue) * 100) * 100) / 100 : 0;
+      const hasOverhead = rawOverhead !== null && totalOverhead > 0;
+
+      const overhead = rawOverhead
+        ? {
+            id: rawOverhead.id,
+            companyId: rawOverhead.companyId,
+            voucherId: rawOverhead.voucherId,
+            transportCost,
+            labelingCost,
+            loadingCost,
+            otherCost,
+            otherCostLabel: rawOverhead.otherCostLabel,
+            notes: rawOverhead.notes,
+            updatedBy: rawOverhead.updatedBy,
+            createdAt: rawOverhead.createdAt,
+            updatedAt: rawOverhead.updatedAt,
+          }
+        : null;
+
       return {
         id: v.id,
         date: v.date.toISOString().split('T')[0],
@@ -107,6 +143,13 @@ billPnlRouter.get('/', requireUser, async (req: Request, res: Response) => {
         profit: Math.round(profit * 100) / 100,
         marginPct: Math.round(marginPct * 100) / 100,
         items,
+        overhead,
+        totalOverhead,
+        tallyProfit,
+        tallyMargin,
+        adjustedProfit,
+        adjustedMargin,
+        hasOverhead,
       };
     });
 
@@ -136,6 +179,13 @@ billPnlRouter.get('/', requireUser, async (req: Request, res: Response) => {
     const totalProfit = totalSales - totalCost;
     const avgMargin = totalSales > 0 ? (totalProfit / totalSales) * 100 : 0;
 
+    const totalOverheadSum = filteredBills.reduce((s, b) => s + b.totalOverhead, 0);
+    const trueCostOfGoods = totalCost + totalOverheadSum;
+    const tallyProfitSum = totalProfit;
+    const trueProfit = tallyProfitSum - totalOverheadSum;
+    const tallyMarginAvg = avgMargin;
+    const trueMargin = totalSales > 0 ? (trueProfit / totalSales) * 100 : 0;
+
     // Apply pagination
     const totalBills = filteredBills.length;
     const totalPages = Math.ceil(totalBills / pageSize) || 1;
@@ -148,6 +198,12 @@ billPnlRouter.get('/', requireUser, async (req: Request, res: Response) => {
         totalCost: Math.round(totalCost * 100) / 100,
         totalProfit: Math.round(totalProfit * 100) / 100,
         avgMargin: Math.round(avgMargin * 10) / 10,
+        totalOverhead: Math.round(totalOverheadSum * 100) / 100,
+        trueCostOfGoods: Math.round(trueCostOfGoods * 100) / 100,
+        tallyProfit: Math.round(tallyProfitSum * 100) / 100,
+        trueProfit: Math.round(trueProfit * 100) / 100,
+        tallyMargin: Math.round(tallyMarginAvg * 10) / 10,
+        trueMargin: Math.round(trueMargin * 10) / 10,
       },
       pagination: {
         page,

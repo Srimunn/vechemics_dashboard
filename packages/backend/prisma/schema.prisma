@@ -25,13 +25,14 @@ model Company {
   lastSyncAt  DateTime?
   createdAt   DateTime  @default(now())
 
-  vouchers       Voucher[]
-  ledgers        Ledger[]
-  stockItems     StockItem[]
-  outstandings   Outstanding[]
-  kpiSnapshots   KpiSnapshot[]
-  notifications  Notification[]
-  ledgerBalances LedgerBalance[]
+  vouchers          Voucher[]
+  ledgers           Ledger[]
+  stockItems        StockItem[]
+  outstandings      Outstanding[]
+  kpiSnapshots      KpiSnapshot[]
+  notifications     Notification[]
+  ledgerBalances    LedgerBalance[]
+  billOverheadCosts BillOverheadCost[]
 }
 
 model Voucher {
@@ -47,8 +48,9 @@ model Voucher {
   amount        Decimal  @db.Decimal(18, 2)
   isCancelled   Boolean  @default(false)
 
-  items         VoucherItem[]
+  items        VoucherItem[]
   ledgerEntries VoucherLedgerEntry[]
+  overheadCost BillOverheadCost?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -214,3 +216,24 @@ model LedgerBalance {
   @@unique([companyId, name])
   @@index([parentGroup])
 }
+
+model BillOverheadCost {
+  id             String   @id @default(cuid())
+  companyId      String
+  voucherId      String   @unique
+  transportCost  Decimal  @default(0)
+  labelingCost   Decimal  @default(0)
+  loadingCost    Decimal  @default(0)
+  otherCost      Decimal  @default(0)
+  otherCostLabel String?
+  notes          String?
+  updatedBy      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  company        Company  @relation(fields: [companyId], references: [id])
+  voucher        Voucher  @relation(fields: [voucherId], references: [id])
+
+  @@unique([companyId, voucherId])
+}
+

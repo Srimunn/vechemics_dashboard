@@ -15,21 +15,28 @@ import {
 export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
 
-  // State for expanded dropdown groups (persisted in localStorage)
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => {
+  // Initial state: safe default state for SSR hydration matching
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+    Analytics: true,
+    Operations: true,
+    Compliance: true,
+  });
+
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+
+  // Load persisted expanded state from localStorage on mount (client-only)
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('vchemics_sidebar_expanded');
-        if (saved) return JSON.parse(saved);
+        if (saved) {
+          setExpandedGroups(JSON.parse(saved));
+        }
       } catch {
         // ignore
       }
     }
-    // Default: all expanded
-    return { Analytics: true, Operations: true, Compliance: true };
-  });
-
-  const [unreadCount, setUnreadCount] = useState<number>(0);
+  }, []);
 
   // Unread notifications badge fetch
   useEffect(() => {
@@ -61,7 +68,11 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           if (!prev[group.label]) {
             const next = { ...prev, [group.label]: true };
             if (typeof window !== 'undefined') {
-              localStorage.setItem('vchemics_sidebar_expanded', JSON.stringify(next));
+              try {
+                localStorage.setItem('vchemics_sidebar_expanded', JSON.stringify(next));
+              } catch {
+                // ignore
+              }
             }
             return next;
           }
@@ -75,7 +86,11 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     setExpandedGroups((prev) => {
       const next = { ...prev, [label]: !prev[label] };
       if (typeof window !== 'undefined') {
-        localStorage.setItem('vchemics_sidebar_expanded', JSON.stringify(next));
+        try {
+          localStorage.setItem('vchemics_sidebar_expanded', JSON.stringify(next));
+        } catch {
+          // ignore
+        }
       }
       return next;
     });

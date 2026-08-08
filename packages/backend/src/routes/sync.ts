@@ -609,37 +609,71 @@ syncRouter.post('/recalculate-costs', requireUser, async (_req: Request, res: Re
   try {
     const companyId = await ensureCompanyId();
 
-    // 1. Calculate weighted average cost from Purchase vouchers
+    // 1. Calculate last (most recent) purchase price per stock item from Purchase vouchers
     const purchaseItems = await prisma.voucherItem.findMany({
       where: { voucher: { companyId, voucherType: 'Purchase', isCancelled: false } },
+      include: {
+        voucher: {
+          select: {
+            date: true,
+            voucherNumber: true,
+          },
+        },
+      },
     });
 
-    const totalsMap = new Map<string, { totalAmount: number; totalQty: number }>();
+    const itemPurchasesMap = new Map<string, typeof purchaseItems>();
     purchaseItems.forEach((item) => {
       const key = item.stockItemName.trim().toLowerCase();
       if (!key) return;
-      const curr = totalsMap.get(key) || { totalAmount: 0, totalQty: 0 };
-      curr.totalAmount += num(item.amount);
-      curr.totalQty += num(item.quantity);
-      totalsMap.set(key, curr);
+      const list = itemPurchasesMap.get(key) || [];
+      list.push(item);
+      itemPurchasesMap.set(key, list);
     });
 
-    // 2. Update StockItem.avgCost
+    // Find item rate from the most recent purchase voucher for each stock item.
+    // Sort by voucher date DESC (newest first). On ties, sort by voucherNumber DESC (latest entry that day).
+    const lastCostMap = new Map<string, number>();
+    for (const [key, itemsList] of itemPurchasesMap.entries()) {
+      itemsList.sort((a, b) => {
+        const dateA = a.voucher.date.getTime();
+        const dateB = b.voucher.date.getTime();
+        if (dateB !== dateA) {
+          return dateB - dateA;
+        }
+        return (b.voucher.voucherNumber || '').localeCompare(
+          a.voucher.voucherNumber || '',
+          undefined,
+          { numeric: true, sensitivity: 'base' },
+        );
+      });
+
+      const mostRecentItem = itemsList[0];
+      if (mostRecentItem) {
+        const qty = num(mostRecentItem.quantity);
+        const itemRate = num(mostRecentItem.rate) || (qty > 0 ? num(mostRecentItem.amount) / qty : 0);
+        if (itemRate > 0) {
+          lastCostMap.set(key, itemRate);
+        }
+      }
+    }
+
+    // 2. Update StockItem.avgCost with the last purchase price
     const stockItems = await prisma.stockItem.findMany({ where: { companyId } });
-    const avgCostMap = new Map<string, number>();
+    const stockItemMap = new Map<string, number>();
 
     for (const item of stockItems) {
       const key = item.name.trim().toLowerCase();
-      const purchase = totalsMap.get(key);
-      let avgCost = num(item.avgCost);
-      if (purchase && purchase.totalQty > 0) {
-        avgCost = purchase.totalAmount / purchase.totalQty;
+      const lastCost = lastCostMap.get(key);
+      if (lastCost !== undefined) {
         await prisma.stockItem.update({
           where: { id: item.id },
-          data: { avgCost },
+          data: { avgCost: lastCost },
         });
+        stockItemMap.set(key, lastCost);
+      } else {
+        stockItemMap.set(key, num(item.avgCost));
       }
-      avgCostMap.set(key, avgCost);
     }
 
     // 3. Update Sales VoucherItems
@@ -654,7 +688,7 @@ syncRouter.post('/recalculate-costs', requireUser, async (_req: Request, res: Re
       const qty = num(item.quantity);
       const saleRate = num(item.rate) || (qty > 0 ? saleAmount / qty : 0);
 
-      const dbCost = avgCostMap.get(key) || 0;
+      const dbCost = stockItemMap.get(key) || 0;
       const isEstimated = dbCost === 0;
       const costRate = isEstimated ? saleRate * 0.8 : dbCost;
       const costAmount = costRate * qty;

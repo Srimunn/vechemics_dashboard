@@ -19,6 +19,25 @@ export async function generateNotifications(companyId: string): Promise<number> 
   let countCreated = 0;
 
   try {
+    // Query notification preferences (use defaults if none exists)
+    const pref = await prisma.notificationPreference.findUnique({
+      where: { companyId },
+    });
+
+    const isMasterActive = pref ? pref.isActive : true;
+    if (!isMasterActive) {
+      logger.info({ companyId }, 'Notifications disabled by master preference setting');
+      return 0;
+    }
+
+    const belowCostEnabled = pref ? pref.belowCostAlert : true;
+    const overdueEnabled = pref ? pref.overduePaymentAlert : true;
+    const lowStockEnabled = pref ? pref.lowStockAlert : false;
+    const highValueSaleEnabled = pref ? pref.highValueSaleAlert : false;
+    const highValueThresholdVal = pref ? num(pref.highValueThreshold) : 50000;
+    const dailySummaryEnabled = pref ? pref.dailySummary : false;
+    const newBillEnabled = pref ? pref.newBillAlert : false;
+
     // Helper to safely create notification if not already created with same relatedId
     const notify = async (data: {
       type: string;
@@ -53,52 +72,57 @@ export async function generateNotifications(companyId: string): Promise<number> 
     };
 
     // 1. Overdue Receivables (>30 days warning, >90 days critical)
-    const overdueReceivables = await prisma.outstanding.findMany({
-      where: {
-        companyId,
-        type: 'receivable',
-        overdueDays: { gt: 30 },
-      },
-    });
-
-    for (const item of overdueReceivables) {
-      const isCritical = num(item.overdueDays) > 90;
-      await notify({
-        type: 'overdue_receivable',
-        title: `Overdue Payment: ${item.partyName}`,
-        message: `${formatINR(num(item.pendingAmount))} outstanding for ${item.overdueDays} days (Bill: ${item.billRef})`,
-        severity: isCritical ? 'critical' : 'warning',
-        relatedId: item.id,
-        relatedUrl: '/dashboard/receivables',
+    if (overdueEnabled) {
+      const overdueReceivables = await prisma.outstanding.findMany({
+        where: {
+          companyId,
+          type: 'receivable',
+          overdueDays: { gt: 30 },
+        },
       });
-    }
 
-    // 2. Payment Due Soon (payables due in next 7 days)
-    const payables = await prisma.outstanding.findMany({
-      where: {
-        companyId,
-        type: 'payable',
-      },
-    });
-
-    const now = new Date();
-    const next7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-
-    for (const p of payables) {
-      if (p.dueDate && p.dueDate >= now && p.dueDate <= next7Days) {
-        const daysLeft = Math.ceil((p.dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      for (const item of overdueReceivables) {
+        const isCritical = num(item.overdueDays) > 90;
         await notify({
-          type: 'payment_due',
-          title: `Payment Due Soon: ${p.partyName}`,
-          message: `${formatINR(num(p.pendingAmount))} due on ${p.dueDate.toISOString().split('T')[0]} (${daysLeft} days left)`,
-          severity: 'warning',
-          relatedId: p.id,
-          relatedUrl: '/dashboard/payables',
+          type: 'overdue_receivable',
+          title: `Overdue Payment: ${item.partyName}`,
+          message: `${formatINR(num(item.pendingAmount))} outstanding for ${item.overdueDays} days (Bill: ${item.billRef})`,
+          severity: isCritical ? 'critical' : 'warning',
+          relatedId: item.id,
+          relatedUrl: '/dashboard/receivables',
         });
       }
     }
 
+    // 2. Payment Due Soon (payables due in next 7 days)
+    if (overdueEnabled) {
+      const payables = await prisma.outstanding.findMany({
+        where: {
+          companyId,
+          type: 'payable',
+        },
+      });
+
+      const now = new Date();
+      const next7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+      for (const p of payables) {
+        if (p.dueDate && p.dueDate >= now && p.dueDate <= next7Days) {
+          const daysLeft = Math.ceil((p.dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          await notify({
+            type: 'payment_due',
+            title: `Payment Due Soon: ${p.partyName}`,
+            message: `${formatINR(num(p.pendingAmount))} due on ${p.dueDate.toISOString().split('T')[0]} (${daysLeft} days left)`,
+            severity: 'warning',
+            relatedId: p.id,
+            relatedUrl: '/dashboard/payables',
+          });
+        }
+      }
+    }
+
     // 3. GST Filing Reminder (if today is between 15th and 20th of month)
+    const now = new Date();
     const dayOfMonth = now.getDate();
     if (dayOfMonth >= 15 && dayOfMonth <= 20) {
       const snapshot = await prisma.kpiSnapshot.findFirst({
@@ -117,75 +141,130 @@ export async function generateNotifications(companyId: string): Promise<number> 
     }
 
     // 4. Low Stock Alert (closingQty > 0 AND closingQty < 5)
-    const lowStockItems = await prisma.stockItem.findMany({
-      where: {
-        companyId,
-        closingQty: { gt: 0, lt: 5 },
-      },
-    });
-
-    for (const item of lowStockItems) {
-      await notify({
-        type: 'low_stock',
-        title: `Low Stock Alert: ${item.name}`,
-        message: `Only ${num(item.closingQty)} ${item.unit || 'NOS'} remaining in inventory`,
-        severity: 'info',
-        relatedId: item.id,
-        relatedUrl: '/dashboard/inventory',
+    if (lowStockEnabled) {
+      const lowStockItems = await prisma.stockItem.findMany({
+        where: {
+          companyId,
+          closingQty: { gt: 0, lt: 5 },
+        },
       });
+
+      for (const item of lowStockItems) {
+        await notify({
+          type: 'low_stock',
+          title: `Low Stock Alert: ${item.name}`,
+          message: `Only ${num(item.closingQty)} ${item.unit || 'NOS'} remaining in inventory`,
+          severity: 'info',
+          relatedId: item.id,
+          relatedUrl: '/dashboard/inventory',
+        });
+      }
     }
 
-    // 5. Negative Margin Alert (sale below cost)
-    const negativeMarginItems = await prisma.voucherItem.findMany({
-      where: {
-        voucher: { companyId, voucherType: 'Sales', isCancelled: false },
-        profit: { lt: 0 },
-      },
-      include: { voucher: true },
-      take: 10,
-    });
-
-    for (const item of negativeMarginItems) {
-      const saleRate = num(item.rate);
-      const costRate = num(item.costRate);
-      const marginPct = num(item.marginPct).toFixed(1);
-
-      await notify({
-        type: 'negative_margin',
-        title: `Below-Cost Sale: Invoice ${item.voucher.voucherNumber}`,
-        message: `${item.stockItemName} sold at ${formatINR(saleRate)} vs cost ${formatINR(costRate)} (${marginPct}%)`,
-        severity: 'critical',
-        relatedId: item.id,
-        relatedUrl: '/dashboard/bill-pnl',
+    // 5. Negative Margin / Below-Cost Alert
+    if (belowCostEnabled) {
+      const negativeMarginItems = await prisma.voucherItem.findMany({
+        where: {
+          voucher: { companyId, voucherType: 'Sales', isCancelled: false },
+          profit: { lt: 0 },
+        },
+        include: { voucher: true },
+        take: 10,
       });
+
+      for (const item of negativeMarginItems) {
+        const saleRate = num(item.rate);
+        const costRate = num(item.costRate);
+        const marginPct = num(item.marginPct).toFixed(1);
+
+        await notify({
+          type: 'negative_margin',
+          title: `Below-Cost Sale: Invoice ${item.voucher.voucherNumber}`,
+          message: `${item.stockItemName} sold at ${formatINR(saleRate)} vs cost ${formatINR(costRate)} (${marginPct}%)`,
+          severity: 'critical',
+          relatedId: item.id,
+          relatedUrl: '/dashboard/bill-pnl',
+        });
+      }
     }
 
     // 6. Daily Sales Summary
-    const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    const dayEnd = new Date(dayStart);
-    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+    if (dailySummaryEnabled) {
+      const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      const dayEnd = new Date(dayStart);
+      dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
-    const [todaySalesVouchers, todayReceiptVouchers] = await Promise.all([
-      prisma.voucher.findMany({
-        where: { companyId, voucherType: 'Sales', isCancelled: false, date: { gte: dayStart, lt: dayEnd } },
-      }),
-      prisma.voucher.findMany({
-        where: { companyId, voucherType: 'Receipt', isCancelled: false, date: { gte: dayStart, lt: dayEnd } },
-      }),
-    ]);
+      const [todaySalesVouchers, todayReceiptVouchers] = await Promise.all([
+        prisma.voucher.findMany({
+          where: { companyId, voucherType: 'Sales', isCancelled: false, date: { gte: dayStart, lt: dayEnd } },
+        }),
+        prisma.voucher.findMany({
+          where: { companyId, voucherType: 'Receipt', isCancelled: false, date: { gte: dayStart, lt: dayEnd } },
+        }),
+      ]);
 
-    if (todaySalesVouchers.length > 0 || todayReceiptVouchers.length > 0) {
-      const salesTotal = todaySalesVouchers.reduce((s, v) => s + num(v.amount), 0);
-      const collectionsTotal = todayReceiptVouchers.reduce((s, v) => s + num(v.amount), 0);
+      if (todaySalesVouchers.length > 0 || todayReceiptVouchers.length > 0) {
+        const salesTotal = todaySalesVouchers.reduce((s, v) => s + num(v.amount), 0);
+        const collectionsTotal = todayReceiptVouchers.reduce((s, v) => s + num(v.amount), 0);
 
-      await notify({
-        type: 'daily_summary',
-        title: `Today's Business Summary`,
-        message: `${todaySalesVouchers.length} invoices issued, ${formatINR(salesTotal)} sales, ${formatINR(collectionsTotal)} collected today`,
-        severity: 'info',
-        relatedId: `daily-${dayStart.toISOString().split('T')[0]}`,
-        relatedUrl: '/dashboard/daily-report',
+        await notify({
+          type: 'daily_summary',
+          title: `Today's Business Summary`,
+          message: `${todaySalesVouchers.length} invoices issued, ${formatINR(salesTotal)} sales, ${formatINR(collectionsTotal)} collected today`,
+          severity: 'info',
+          relatedId: `daily-${dayStart.toISOString().split('T')[0]}`,
+          relatedUrl: '/dashboard/daily-report',
+        });
+      }
+    }
+
+    // 7. High-Value Sale Alert
+    if (highValueSaleEnabled) {
+      const highValueSales = await prisma.voucher.findMany({
+        where: {
+          companyId,
+          voucherType: 'Sales',
+          isCancelled: false,
+          amount: { gte: highValueThresholdVal },
+        },
+        take: 10,
+        orderBy: { date: 'desc' },
       });
+
+      for (const v of highValueSales) {
+        await notify({
+          type: 'high_value_sale',
+          title: `High-Value Invoice: ${v.voucherNumber}`,
+          message: `Invoice amount of ${formatINR(num(v.amount))} billed to ${v.partyName || 'Customer'}`,
+          severity: 'warning',
+          relatedId: v.id,
+          relatedUrl: '/dashboard/sales-analytics',
+        });
+      }
+    }
+
+    // 8. New Bill Alert
+    if (newBillEnabled) {
+      const recentBills = await prisma.voucher.findMany({
+        where: {
+          companyId,
+          voucherType: 'Sales',
+          isCancelled: false,
+        },
+        take: 10,
+        orderBy: { date: 'desc' },
+      });
+
+      for (const v of recentBills) {
+        await notify({
+          type: 'new_bill',
+          title: `New Bill Recorded: ${v.voucherNumber}`,
+          message: `Sales bill of ${formatINR(num(v.amount))} recorded for ${v.partyName || 'Customer'}`,
+          severity: 'info',
+          relatedId: v.id,
+          relatedUrl: '/dashboard/bill-pnl',
+        });
+      }
     }
 
     logger.info({ companyId, countCreated }, 'Notification generation complete');

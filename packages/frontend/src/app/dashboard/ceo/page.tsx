@@ -202,6 +202,45 @@ export default function CeoDashboardPage() {
   const payDays = Math.round((payables / mtdPurchase) * 30);
   const stockTurnover = (mtdPurchase / (inventory || 1)).toFixed(1);
 
+  const [downloadingReport, setDownloadingReport] = React.useState(false);
+
+  const handleDownloadMonthlyPdf = async () => {
+    try {
+      setDownloadingReport(true);
+      const d = new Date(selectedDate);
+      const month = Number.isNaN(d.getTime()) ? new Date().getUTCMonth() + 1 : d.getUTCMonth() + 1;
+      const year = Number.isNaN(d.getTime()) ? new Date().getUTCFullYear() : d.getUTCFullYear();
+
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const token = typeof window !== 'undefined' ? localStorage.getItem('vchemics_auth_token') : null;
+
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`${backendUrl}/api/reports/monthly-ceo?month=${month}&year=${year}`, {
+        headers,
+        credentials: 'include',
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `VChemics_Monthly_CEO_Report_${String(month).padStart(2, '0')}_${year}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to download Monthly CEO Report PDF:', err);
+      alert('Failed to download Monthly CEO Report PDF. Please try again.');
+    } finally {
+      setDownloadingReport(false);
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
@@ -211,6 +250,15 @@ export default function CeoDashboardPage() {
     >
       {/* Desktop action buttons row */}
       <div className="hidden lg:flex flex-wrap items-center justify-end gap-2.5">
+        <button
+          type="button"
+          onClick={handleDownloadMonthlyPdf}
+          disabled={downloadingReport}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2 text-[13px] font-semibold text-blue-700 hover:bg-blue-100 transition-colors min-h-[44px] disabled:opacity-50"
+        >
+          {downloadingReport ? <RefreshCw className="h-4 w-4 animate-spin text-blue-600" /> : <FileText className="h-4 w-4 text-blue-600" />}
+          <span>{downloadingReport ? 'Generating...' : 'Monthly Report'}</span>
+        </button>
         <ExportButton moduleName="financial-overview" label="Export Report" />
         <RefreshButton
           onRefreshed={() => load(selectedDate)}
@@ -229,7 +277,16 @@ export default function CeoDashboardPage() {
       <GreetingHeader name={user.name} fyLabel={company.fyLabel} lastSync={lastSync} onRefreshed={() => load(selectedDate)} />
 
       {/* Mobile Floating Export Button */}
-      <div className="lg:hidden">
+      <div className="lg:hidden flex gap-2">
+        <button
+          type="button"
+          onClick={handleDownloadMonthlyPdf}
+          disabled={downloadingReport}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2 text-[13px] font-semibold text-blue-700 hover:bg-blue-100 transition-colors min-h-[44px] disabled:opacity-50 flex-1 justify-center"
+        >
+          {downloadingReport ? <RefreshCw className="h-4 w-4 animate-spin text-blue-600" /> : <FileText className="h-4 w-4 text-blue-600" />}
+          <span>{downloadingReport ? 'Generating...' : 'Monthly Report'}</span>
+        </button>
         <ExportButton moduleName="financial-overview" label="Export Report" />
       </div>
 

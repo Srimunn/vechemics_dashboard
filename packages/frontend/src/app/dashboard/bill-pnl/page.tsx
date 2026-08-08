@@ -5,6 +5,18 @@ import {
   TrendingUp, Search, ChevronDown, ChevronRight, Filter, RefreshCw,
   AlertCircle, ArrowUpDown, IndianRupee, Layers, ShoppingBag, Truck, CheckCircle2, RotateCcw
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  Tooltip as RechartsTooltip,
+  Legend
+} from 'recharts';
 import { ExportButton } from '@/components/ui/ExportButton';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 
@@ -337,6 +349,200 @@ function OverheadForm({ bill, onSaved }: { bill: BillRow; onSaved: () => void })
   );
 }
 
+function OverheadChartsSection({ bills }: { bills: BillRow[] }) {
+  const [isExpanded, setIsExpanded] = useState(true);
+
+  const overheadBills = bills.filter((b) => b.hasOverhead);
+  if (overheadBills.length === 0) return null;
+
+  // Chart A Data: Grouped Bar Chart for overhead bills
+  const barChartData = overheadBills.map((b) => {
+    const rawNum = b.voucherNumber || '';
+    const shortInvoice = rawNum.length > 4 ? rawNum.slice(-4) : rawNum || b.id.slice(-4);
+    return {
+      invoiceNum: shortInvoice,
+      fullInvoice: rawNum,
+      customer: b.partyName,
+      tallyMargin: Number((b.tallyMargin ?? b.marginPct ?? 0).toFixed(1)),
+      trueMargin: Number((b.adjustedMargin ?? b.marginPct ?? 0).toFixed(1)),
+    };
+  });
+
+  // Chart B Data: Aggregated Overhead Costs
+  let transportTotal = 0;
+  let labelingTotal = 0;
+  let loadingTotal = 0;
+  let otherTotal = 0;
+
+  overheadBills.forEach((b) => {
+    if (b.overhead) {
+      transportTotal += Number(b.overhead.transportCost || 0);
+      labelingTotal += Number(b.overhead.labelingCost || 0);
+      loadingTotal += Number(b.overhead.loadingCost || 0);
+      otherTotal += Number(b.overhead.otherCost || 0);
+    }
+  });
+
+  const totalOverhead = transportTotal + labelingTotal + loadingTotal + otherTotal;
+
+  const rawPieData = [
+    { name: 'Transport', value: transportTotal, color: '#3b82f6' },
+    { name: 'Labeling', value: labelingTotal, color: '#10b981' },
+    { name: 'Loading', value: loadingTotal, color: '#f59e0b' },
+    { name: 'Other', value: otherTotal, color: '#8b5cf6' },
+  ];
+
+  // Filter out 0 slices unless all slices are 0
+  const pieData = rawPieData.filter((d) => d.value > 0);
+  if (pieData.length === 0 && totalOverhead === 0) {
+    pieData.push(...rawPieData);
+  }
+
+  // Summary Line Math
+  const totalSales = overheadBills.reduce((acc, b) => acc + b.saleValue, 0);
+  const totalTallyProfit = overheadBills.reduce((acc, b) => acc + (b.tallyProfit ?? b.profit), 0);
+  const totalAdjustedProfit = overheadBills.reduce((acc, b) => acc + (b.adjustedProfit ?? b.profit), 0);
+
+  const avgTallyMargin = totalSales > 0 ? (totalTallyProfit / totalSales) * 100 : 0;
+  const avgTrueMargin = totalSales > 0 ? (totalAdjustedProfit / totalSales) * 100 : 0;
+  const impactPct = Math.max(0, avgTallyMargin - avgTrueMargin);
+
+  const CustomBarTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-md text-xs space-y-1 z-50">
+          <p className="font-bold text-gray-800">Invoice #{data.fullInvoice}</p>
+          <p className="text-gray-600">Customer: {data.customer}</p>
+          <div className="pt-1 border-t border-gray-100 space-y-0.5">
+            <p className="text-blue-600 font-semibold">Tally Margin: {data.tallyMargin}%</p>
+            <p className="text-indigo-600 font-semibold">True Margin: {data.trueMargin}%</p>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const CustomPieTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      const pct = totalOverhead > 0 ? ((data.value / totalOverhead) * 100).toFixed(1) : '0';
+      return (
+        <div className="rounded-lg border border-gray-200 bg-white p-2.5 shadow-md text-xs z-50">
+          <p className="font-bold" style={{ color: data.color }}>{data.name}</p>
+          <p className="text-gray-800 font-semibold">{formatINR(data.value)} ({pct}%)</p>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden transition-all">
+      {/* Collapsible Header */}
+      <button
+        type="button"
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center justify-between px-5 py-4 bg-slate-50 hover:bg-slate-100/80 transition-colors border-b border-gray-200"
+      >
+        <div className="flex items-center gap-2.5">
+          <div className="rounded-lg bg-indigo-50 p-1.5 text-indigo-600">
+            <TrendingUp className="h-5 w-5" />
+          </div>
+          <div className="text-left">
+            <h3 className="text-sm font-bold text-slate-800">Overhead Impact Analysis</h3>
+            <p className="text-xs text-slate-500">
+              Visual margin comparison &amp; overhead cost distribution across {overheadBills.length} bill{overheadBills.length > 1 ? 's' : ''}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100">
+            {overheadBills.length} Bill{overheadBills.length > 1 ? 's' : ''} with Overhead
+          </span>
+          {isExpanded ? <ChevronDown className="h-5 w-5 text-gray-500" /> : <ChevronRight className="h-5 w-5 text-gray-500" />}
+        </div>
+      </button>
+
+      {/* Expanded Content */}
+      {isExpanded && (
+        <div className="p-5 space-y-5">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Chart A: Grouped Bar Chart */}
+            <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm flex flex-col justify-between">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3">
+                Margin by Invoice
+              </h4>
+              <div className="h-[250px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={barChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <XAxis dataKey="invoiceNum" tick={{ fontSize: 11, fill: '#64748b' }} />
+                    <YAxis tick={{ fontSize: 11, fill: '#64748b' }} unit="%" />
+                    <RechartsTooltip content={<CustomBarTooltip />} />
+                    <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                    <Bar dataKey="tallyMargin" name="Tally Margin" fill="#93c5fd" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="trueMargin" name="True Margin" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Chart B: Overhead Cost Breakdown Donut Chart */}
+            <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm flex flex-col justify-between">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3">
+                Overhead Cost Breakdown
+              </h4>
+              <div className="relative h-[250px] w-full flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={55}
+                      outerRadius={80}
+                      paddingAngle={3}
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip content={<CustomPieTooltip />} />
+                    <Legend wrapperStyle={{ fontSize: '12px' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                {/* Center text overlay */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pb-6">
+                  <span className="text-[10px] uppercase font-semibold text-gray-400">Total Overhead</span>
+                  <span className="text-sm font-bold text-gray-900">{formatINR(totalOverhead)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Single Summary Line */}
+          <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-center text-xs font-medium">
+            <span>
+              Tally Margin:{' '}
+              <strong className="text-emerald-600 font-bold">{avgTallyMargin.toFixed(1)}%</strong>
+              {' → '}
+              True Margin:{' '}
+              <strong className="text-amber-600 font-bold">{avgTrueMargin.toFixed(1)}%</strong>
+              {' '}
+              <span className="text-slate-600">
+                (−{impactPct.toFixed(1)}% overhead impact across {overheadBills.length} bill{overheadBills.length > 1 ? 's' : ''})
+              </span>
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function BillPnlPage() {
   const getStartOfMonth = () => {
     const d = new Date();
@@ -521,6 +727,9 @@ export default function BillPnlPage() {
           </div>
         </div>
       )}
+
+      {/* Overhead Impact Analysis Charts Section */}
+      {data?.bills && <OverheadChartsSection bills={data.bills} />}
 
       {/* Filter & Controls Bar */}
       <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">

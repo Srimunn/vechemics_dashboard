@@ -14,6 +14,7 @@ import { exportRouter } from './routes/export.js';
 import { reportsRouter } from './routes/reports.js';
 import { auditRouter } from './routes/audit.js';
 import { notificationsRouter } from './routes/notifications.js';
+import { notificationPreferencesRouter } from './routes/notification-preferences.js';
 import { searchRouter } from './routes/search.js';
 import billOverheadRoutes from './routes/bill-overhead.js';
 
@@ -50,6 +51,7 @@ app.use('/api/export', exportRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/audit', auditRouter);
 app.use('/api/notifications', notificationsRouter);
+app.use('/api/notification-preferences', notificationPreferencesRouter);
 app.use('/api/search', searchRouter);
 app.use(billOverheadRoutes);
 

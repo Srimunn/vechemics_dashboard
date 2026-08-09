@@ -33,6 +33,7 @@ model Company {
   notifications     Notification[]
   ledgerBalances    LedgerBalance[]
   billOverheadCosts BillOverheadCost[]
+  notificationPreference NotificationPreference?
 }
 
 model Voucher {
@@ -235,5 +236,23 @@ model BillOverheadCost {
   voucher        Voucher  @relation(fields: [voucherId], references: [id])
 
   @@unique([companyId, voucherId])
+}
+
+model NotificationPreference {
+  id                    String   @id @default(cuid())
+  companyId             String
+  belowCostAlert        Boolean  @default(true)
+  overduePaymentAlert   Boolean  @default(true)
+  lowStockAlert         Boolean  @default(false)
+  highValueSaleAlert    Boolean  @default(false)
+  highValueThreshold    Decimal  @default(50000)
+  dailySummary          Boolean  @default(false)
+  newBillAlert          Boolean  @default(false)
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  company               Company  @relation(fields: [companyId], references: [id])
+  @@unique([companyId])
 }
 

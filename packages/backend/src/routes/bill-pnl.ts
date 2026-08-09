@@ -103,7 +103,8 @@ billPnlRouter.get('/', requireUser, async (req: Request, res: Response) => {
 
       const saleValue = num(v.amount);
       const costValue = items.reduce((s, i) => s + i.costAmount, 0) || saleValue * 0.8;
-      const profit = saleValue - costValue;
+      const itemProfitSum = items.reduce((s, i) => s + i.profit, 0);
+      const profit = items.length > 0 ? itemProfitSum : (saleValue - costValue);
       const marginPct = saleValue > 0 ? (profit / saleValue) * 100 : 0;
 
       const rawOverhead = overheadMap.get(v.id) || null;
@@ -179,7 +180,7 @@ billPnlRouter.get('/', requireUser, async (req: Request, res: Response) => {
     // Compute summary totals across all matching bills
     const totalSales = filteredBills.reduce((s, b) => s + b.saleValue, 0);
     const totalCost = filteredBills.reduce((s, b) => s + b.costValue, 0);
-    const totalProfit = totalSales - totalCost;
+    const totalProfit = filteredBills.reduce((s, b) => s + b.profit, 0);
     const avgMargin = totalSales > 0 ? (totalProfit / totalSales) * 100 : 0;
 
     const totalOverheadSum = filteredBills.reduce((s, b) => s + b.totalOverhead, 0);

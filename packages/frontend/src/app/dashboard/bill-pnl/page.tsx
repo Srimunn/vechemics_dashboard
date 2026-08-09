@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import {
   TrendingUp, Search, ChevronDown, ChevronRight, Filter, RefreshCw,
   AlertCircle, ArrowUpDown, IndianRupee, Layers, ShoppingBag, Truck, CheckCircle2, RotateCcw
@@ -112,7 +112,7 @@ function OverheadForm({ bill, onSaved }: { bill: BillRow; onSaved: () => void })
   const liveTotalOverhead = numTransport + numLabeling + numLoading + numOther;
 
   const numTrueCost = bill.costValue + liveTotalOverhead;
-  const numTrueProfit = bill.saleValue - numTrueCost;
+  const numTrueProfit = bill.profit - liveTotalOverhead;
   const numTrueMargin = bill.saleValue > 0 ? (numTrueProfit / bill.saleValue) * 100 : 0;
 
   const handleSave = async (e: React.FormEvent) => {
@@ -726,32 +726,32 @@ export default function BillPnlPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-gray-600">
+            <table className="w-full text-left text-sm text-gray-600 border-collapse table-fixed">
               <thead className="bg-gray-50 text-xs uppercase text-gray-500 border-b border-gray-200">
                 <tr>
-                  <th className="w-10 px-4 py-3"></th>
-                  <th className="px-4 py-3 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('date')}>
+                  <th className="w-10 px-3 py-3 text-center"></th>
+                  <th className="w-28 px-3 py-3 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('date')}>
                     <div className="flex items-center gap-1">Date <ArrowUpDown className="h-3 w-3" /></div>
                   </th>
-                  <th className="px-4 py-3 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('voucherNumber')}>
+                  <th className="w-36 px-3 py-3 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('voucherNumber')}>
                     <div className="flex items-center gap-1">Invoice# <ArrowUpDown className="h-3 w-3" /></div>
                   </th>
-                  <th className="px-4 py-3 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('partyName')}>
+                  <th className="px-3 py-3 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('partyName')}>
                     <div className="flex items-center gap-1">Customer <ArrowUpDown className="h-3 w-3" /></div>
                   </th>
-                  <th className="px-4 py-3 text-right cursor-pointer hover:bg-gray-100" onClick={() => handleSort('saleValue')}>
+                  <th className="w-32 px-3 py-3 text-right cursor-pointer hover:bg-gray-100" onClick={() => handleSort('saleValue')}>
                     <div className="flex items-center justify-end gap-1">Sale Value <ArrowUpDown className="h-3 w-3" /></div>
                   </th>
-                  <th className="px-4 py-3 text-right cursor-pointer hover:bg-gray-100" onClick={() => handleSort('costValue')}>
+                  <th className="w-32 px-3 py-3 text-right cursor-pointer hover:bg-gray-100" onClick={() => handleSort('costValue')}>
                     <div className="flex items-center justify-end gap-1">Cost Value <ArrowUpDown className="h-3 w-3" /></div>
                   </th>
-                  <th className="px-4 py-3 text-right cursor-pointer hover:bg-gray-100" onClick={() => handleSort('totalOverhead')}>
+                  <th className="w-28 px-3 py-3 text-right cursor-pointer hover:bg-gray-100" onClick={() => handleSort('totalOverhead')}>
                     <div className="flex items-center justify-end gap-1">Overhead <ArrowUpDown className="h-3 w-3" /></div>
                   </th>
-                  <th className="px-4 py-3 text-right cursor-pointer hover:bg-gray-100" onClick={() => handleSort('profit')}>
+                  <th className="w-32 px-3 py-3 text-right cursor-pointer hover:bg-gray-100" onClick={() => handleSort('profit')}>
                     <div className="flex items-center justify-end gap-1">Profit <ArrowUpDown className="h-3 w-3" /></div>
                   </th>
-                  <th className="px-4 py-3 text-right cursor-pointer hover:bg-gray-100" onClick={() => handleSort('marginPct')}>
+                  <th className="w-28 px-3 py-3 text-right cursor-pointer hover:bg-gray-100" onClick={() => handleSort('marginPct')}>
                     <div className="flex items-center justify-end gap-1">Margin % <ArrowUpDown className="h-3 w-3" /></div>
                   </th>
                 </tr>
@@ -763,21 +763,19 @@ export default function BillPnlPage() {
                   const displayMargin = bill.adjustedMargin ?? bill.marginPct;
 
                   return (
-                    <tr key={bill.id} className="group hover:bg-blue-50/40 transition-colors">
-                      <td colSpan={9} className="p-0">
-                        <div className="flex items-center px-4 py-3.5">
+                    <Fragment key={bill.id}>
+                      <tr className="hover:bg-blue-50/40 transition-colors">
+                        <td className="w-10 px-3 py-3.5 text-center">
                           <button
                             onClick={() => toggleRow(bill.id)}
-                            className="mr-3 rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-700"
+                            className="rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-700"
                           >
-                            {isExpanded ? (
-                              <ChevronDown className="h-4 w-4" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4" />
-                            )}
+                            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                           </button>
-                          <div className="w-24 font-medium text-gray-900">{bill.date}</div>
-                          <div className="w-36 font-semibold text-blue-600 flex items-center gap-1.5">
+                        </td>
+                        <td className="w-28 px-3 py-3.5 font-medium text-gray-900 whitespace-nowrap">{bill.date}</td>
+                        <td className="w-36 px-3 py-3.5 font-semibold text-blue-600 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
                             <span>{bill.voucherNumber}</span>
                             {bill.hasOverhead && (
                               <span className="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 ring-1 ring-blue-600/20" title="Custom overhead costs included">
@@ -785,19 +783,20 @@ export default function BillPnlPage() {
                               </span>
                             )}
                           </div>
-                          <div className="flex-1 font-medium text-gray-800 truncate px-2">{bill.partyName}</div>
-                          <div className="w-28 text-right font-semibold text-gray-900">{formatINR(bill.saleValue)}</div>
-                          <div className="w-28 text-right text-gray-600">{formatINR(bill.costValue)}</div>
-                          <div className="w-28 text-right text-gray-600 font-medium">
-                            {bill.totalOverhead > 0 ? formatINR(bill.totalOverhead) : '—'}
-                          </div>
-                          <div className="w-28 text-right font-semibold text-emerald-600">{formatINR(displayProfit)}</div>
-                          <div className="w-24 text-right">{getMarginBadge(displayMargin)}</div>
-                        </div>
+                        </td>
+                        <td className="px-3 py-3.5 font-medium text-gray-800 truncate">{bill.partyName}</td>
+                        <td className="w-32 px-3 py-3.5 text-right font-semibold text-gray-900 whitespace-nowrap">{formatINR(bill.saleValue)}</td>
+                        <td className="w-32 px-3 py-3.5 text-right text-gray-600 whitespace-nowrap">{formatINR(bill.costValue)}</td>
+                        <td className="w-28 px-3 py-3.5 text-right text-gray-600 font-medium whitespace-nowrap">
+                          {bill.totalOverhead > 0 ? formatINR(bill.totalOverhead) : '—'}
+                        </td>
+                        <td className="w-32 px-3 py-3.5 text-right font-semibold text-emerald-600 whitespace-nowrap">{formatINR(displayProfit)}</td>
+                        <td className="w-28 px-3 py-3.5 text-right whitespace-nowrap">{getMarginBadge(displayMargin)}</td>
+                      </tr>
 
-                        {/* Expandable Row for Item Breakdown & Overhead Form */}
-                        {isExpanded && (
-                          <div className="bg-gray-50/80 px-4 sm:px-12 py-4 border-t border-b border-gray-200">
+                      {isExpanded && (
+                        <tr className="bg-gray-50/80">
+                          <td colSpan={9} className="px-4 sm:px-8 py-4 border-t border-b border-gray-200">
                             <p className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">
                               Item-level Profit Breakdown ({bill.items.length} item{bill.items.length !== 1 ? 's' : ''})
                             </p>
@@ -805,30 +804,30 @@ export default function BillPnlPage() {
                               <p className="text-xs text-gray-400 italic py-1">No individual inventory entries recorded for this invoice.</p>
                             ) : (
                               <div className="overflow-x-auto">
-                                <table className="w-full text-xs text-gray-700">
+                                <table className="w-full text-xs text-gray-700 border-collapse">
                                   <thead>
                                     <tr className="border-b border-gray-300 font-semibold text-gray-500">
-                                      <th className="py-1.5 text-left">Item Name</th>
-                                      <th className="py-1.5 text-right">Qty</th>
-                                      <th className="py-1.5 text-right">Sale Rate</th>
-                                      <th className="py-1.5 text-right">Cost Rate</th>
-                                      <th className="py-1.5 text-right">Sale Amt</th>
-                                      <th className="py-1.5 text-right">Cost Amt</th>
-                                      <th className="py-1.5 text-right">Profit</th>
-                                      <th className="py-1.5 text-right">Margin%</th>
+                                      <th className="py-2 px-2 text-left">Item Name</th>
+                                      <th className="py-2 px-2 text-right">Qty</th>
+                                      <th className="py-2 px-2 text-right">Sale Rate</th>
+                                      <th className="py-2 px-2 text-right">Cost Rate</th>
+                                      <th className="py-2 px-2 text-right">Sale Amt</th>
+                                      <th className="py-2 px-2 text-right">Cost Amt</th>
+                                      <th className="py-2 px-2 text-right">Profit</th>
+                                      <th className="py-2 px-2 text-right">Margin%</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-gray-200">
                                     {bill.items.map((item) => (
                                       <tr key={item.id} className="hover:bg-gray-100/60">
-                                        <td className="py-1.5 font-medium text-gray-900">{item.stockItemName}</td>
-                                        <td className="py-1.5 text-right">{item.quantity} {item.unit}</td>
-                                        <td className="py-1.5 text-right">{formatINR(item.saleRate)}</td>
-                                        <td className="py-1.5 text-right">{formatINR(item.costRate)}</td>
-                                        <td className="py-1.5 text-right font-medium">{formatINR(item.saleAmount)}</td>
-                                        <td className="py-1.5 text-right text-gray-600">{formatINR(item.costAmount)}</td>
-                                        <td className="py-1.5 text-right font-semibold text-emerald-600">{formatINR(item.profit)}</td>
-                                        <td className="py-1.5 text-right">{item.marginPct.toFixed(1)}%</td>
+                                        <td className="py-2 px-2 font-medium text-gray-900">{item.stockItemName}</td>
+                                        <td className="py-2 px-2 text-right">{item.quantity} {item.unit}</td>
+                                        <td className="py-2 px-2 text-right">{formatINR(item.saleRate)}</td>
+                                        <td className="py-2 px-2 text-right">{formatINR(item.costRate)}</td>
+                                        <td className="py-2 px-2 text-right font-medium">{formatINR(item.saleAmount)}</td>
+                                        <td className="py-2 px-2 text-right text-gray-600">{formatINR(item.costAmount)}</td>
+                                        <td className="py-2 px-2 text-right font-semibold text-emerald-600">{formatINR(item.profit)}</td>
+                                        <td className="py-2 px-2 text-right">{item.marginPct.toFixed(1)}%</td>
                                       </tr>
                                     ))}
                                   </tbody>
@@ -838,10 +837,10 @@ export default function BillPnlPage() {
 
                             {/* Additional Costs Accountant Form */}
                             <OverheadForm bill={bill} onSaved={fetchBillPnl} />
-                          </div>
-                        )}
-                      </td>
-                    </tr>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>

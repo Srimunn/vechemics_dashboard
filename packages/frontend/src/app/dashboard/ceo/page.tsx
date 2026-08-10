@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import type { CeoDashboardResponse, KpiKey } from '@vchemics/shared';
 import { getCeoDashboard } from '@/lib/api';
-import { computeDelta, formatCurrency, formatIndianNumber } from '@/lib/format';
+import { formatCurrency, formatIndianNumber } from '@/lib/format';
 import { buildMonthlySeries, buildCashflowSeries } from '@/lib/dashboard-derive';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -160,7 +160,7 @@ export default function CeoDashboardPage() {
 
   if (!data) return <CeoSkeleton />;
 
-  const { today, yesterday, lastSync, user, company } = data;
+  const { today, lastSync, user, company } = data;
 
   if (!today) {
     return (
@@ -246,8 +246,6 @@ export default function CeoDashboardPage() {
         {KPI_CONFIGS.map((cfg, idx) => {
           const rawValue = cfg.key ? today[cfg.key] : undefined;
           const value = (rawValue !== undefined && rawValue !== 0) ? rawValue : (cfg.overrideValue ?? 0);
-          const prev = (cfg.key && yesterday) ? yesterday[cfg.key] : undefined;
-          const delta = prev !== undefined ? computeDelta(value, prev) : undefined;
           const isCount = cfg.key === 'ordersBilledToday' || cfg.key === 'newCustomersToday';
           const dynamicLabel = getDynamicKpiLabel(cfg.label, cfg.key, selectedDate);
           return (
@@ -256,10 +254,6 @@ export default function CeoDashboardPage() {
               label={dynamicLabel}
               value={value}
               format={isCount ? (v) => new Intl.NumberFormat('en-IN').format(v) : undefined}
-              delta={delta}
-              deltaSemantics={cfg.semantics}
-              comparisonLabel="Yesterday"
-              comparisonValue={prev}
               accentColor={cfg.accentColor}
               href={cfg.href}
             />
